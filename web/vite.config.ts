@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    allowedHosts: true,
+    allowedHosts: ['vilenarios.com', '.vilenarios.com'],
     proxy: {
       [`${basePath}api`]: {
         target: 'http://localhost:3003',

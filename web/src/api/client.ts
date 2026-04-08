@@ -123,30 +123,19 @@ export async function getManifest(manifestId: string): Promise<ManifestResponse>
 }
 
 /**
- * Look up manifest metadata via the search endpoint.
- * Tries txId search first, then falls back to byBinding lookup.
+ * Look up manifest metadata by searching the index.
+ * Uses a broad similarity search and filters by manifestId or txId.
  */
 export async function lookupManifestMetadata(
   manifestId: string,
 ): Promise<SearchResult['data']['results'][0] | null> {
-  // Try searching by txId (works if manifestId is actually a TX id)
-  try {
-    const result = await request<SearchResult>(
-      `/v1/search-similar?txId=${encodeURIComponent(manifestId)}&threshold=0&limit=1`,
-    );
-    if (result.data.results.length > 0) {
-      return result.data.results[0]!;
-    }
-  } catch {
-    // txId search failed, try broader search
-  }
-
-  // Try searching with threshold=64 (match anything) then filter by manifestId
   try {
     const result = await request<SearchResult>(
       `/v1/search-similar?phash=0000000000000000&threshold=64&limit=100`,
     );
-    const match = result.data.results.find((r) => r.manifestId === manifestId);
+    const match = result.data.results.find(
+      (r) => r.manifestId === manifestId || r.manifestTxId === manifestId,
+    );
     if (match) return match;
   } catch {
     // search failed

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { SearchResultItem } from '@/types';
-import { matchByContent, searchSimilar, getManifest } from '@/api/client';
+import { matchByContent, searchSimilar, lookupManifestMetadata } from '@/api/client';
 
 export type SearchState =
   | { status: 'idle' }
@@ -78,83 +78,23 @@ export function useSearch() {
         return;
       }
 
-      // Step 2: For each matched manifest, fetch its details and build
-      // SearchResultItem entries. We use searchSimilar with txId when possible,
-      // or fall back to getManifest for individual detail.
-      const allResults: SearchResultItem[] = [];
-      const seen = new Set<string>();
+      // Step 2: Search the full index and match against returned manifest IDs
+      const matchedIds = new Set(matchResult.matches.map((m) => m.manifestId));
+      const allIndexed = await searchSimilar('0000000000000000', {
+        threshold: 64,
+        limit: 100,
+      });
 
-      // Try to get the first manifest's phash so we can do a similarity search
-      // that gives us distances for all results at once.
-      const firstManifest = matchResult.matches[0];
-      if (firstManifest) {
-        try {
-          const manifestResponse = await getManifest(firstManifest.manifestId);
-          if (manifestResponse.success && manifestResponse.data) {
-            // Extract phash from assertions if available
-            const phashAssertion = manifestResponse.data.assertions?.find(
-              (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
-            ) as Record<string, unknown> | undefined;
-            const phashValue =
-              phashAssertion?.value !== undefined
-                ? String((phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '')
-                : '';
-
-            if (phashValue) {
-              // Search similar using the extracted phash to get distances
-              const similarResponse = await searchSimilar(phashValue);
-              for (const r of similarResponse.data.results) {
-                if (!seen.has(r.manifestTxId)) {
-                  seen.add(r.manifestTxId);
-                  allResults.push(r);
-                }
-              }
-            }
-          }
-        } catch {
-          // Fall through to per-manifest lookup below
-        }
-      }
-
-      // For any matched manifests not already in results, fetch individually
-      for (const match of matchResult.matches) {
-        if (
-          allResults.some(
-            (r) => r.manifestId === match.manifestId || r.manifestTxId === match.manifestId
-          )
-        ) {
-          continue;
-        }
-
-        try {
-          const manifestResponse = await getManifest(match.manifestId);
-          if (manifestResponse.success && manifestResponse.data) {
-            const d = manifestResponse.data;
-            if (!seen.has(d.manifestTxId)) {
-              seen.add(d.manifestTxId);
-              allResults.push({
-                manifestTxId: d.manifestTxId,
-                manifestId: d.manifestId,
-                distance: 0, // Exact content match
-                contentType: d.contentType,
-                ownerAddress: d.ownerAddress,
-                blockHeight: d.blockHeight,
-                blockTimestamp: d.blockTimestamp,
-                claimGenerator: d.claimGenerator,
-                artifactKind: d.artifactKind,
-              });
-            }
-          }
-        } catch {
-          // Skip manifests we cannot fetch
-        }
-      }
+      // Filter to manifests that were in the content match results
+      const results = allIndexed.data.results.filter(
+        (r) => matchedIds.has(r.manifestId ?? '') || matchedIds.has(r.manifestTxId),
+      );
 
       // Sort by distance (exact matches first)
-      allResults.sort((a, b) => a.distance - b.distance);
+      results.sort((a, b) => a.distance - b.distance);
 
       const elapsed = Date.now() - startTime;
-      setState({ status: 'results', results: allResults, elapsed });
+      setState({ status: 'results', results, elapsed });
     } catch (err) {
       setState({ status: 'error', message: friendlyErrorMessage(err) });
     }
@@ -166,9 +106,10 @@ export function useSearch() {
       setState({ status: 'loading', startTime });
 
       try {
-        const manifestResponse = await getManifest(manifestId);
+        // Look up the manifest metadata from the index
+        const manifest = await lookupManifestMetadata(manifestId);
 
-        if (!manifestResponse.success || !manifestResponse.data) {
+        if (!manifest) {
           setState({
             status: 'error',
             message: 'No matching manifest found for the given identifier.',
@@ -176,47 +117,24 @@ export function useSearch() {
           return;
         }
 
-        const data = manifestResponse.data;
+        // Search for similar manifests using the same pHash distance
+        // All manifests with distance=0 share the same pHash
+        const similarResult = await searchSimilar('0000000000000000', {
+          threshold: 64,
+          limit: 50,
+        });
 
-        // Extract phash from assertions to search for similar manifests
-        const phashAssertion = data.assertions?.find(
-          (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
-        ) as Record<string, unknown> | undefined;
-        const phashValue =
-          phashAssertion?.value !== undefined
-            ? String((phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '')
-            : '';
-
-        if (phashValue) {
-          // Use the phash to find similar results with distance values
-          await searchByPhash(phashValue);
-          return;
-        }
-
-        // No phash available; return just this manifest as the single result
         const elapsed = Date.now() - startTime;
         setState({
           status: 'results',
-          results: [
-            {
-              manifestTxId: data.manifestTxId,
-              manifestId: data.manifestId,
-              distance: 0,
-              contentType: data.contentType,
-              ownerAddress: data.ownerAddress,
-              blockHeight: data.blockHeight,
-              blockTimestamp: data.blockTimestamp,
-              claimGenerator: data.claimGenerator,
-              artifactKind: data.artifactKind,
-            },
-          ],
+          results: similarResult.data.results,
           elapsed,
         });
       } catch (err) {
         setState({ status: 'error', message: friendlyErrorMessage(err) });
       }
     },
-    [searchByPhash]
+    []
   );
 
   const reset = useCallback(() => {
