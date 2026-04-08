@@ -35,7 +35,7 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
 
   return (
     <Link
-      to={`/manifest/${encodeURIComponent(manifestLinkId)}`}
+      to={`/manifest/${encodeURIComponent(manifestLinkId)}?distance=${result.distance}`}
       className="block overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {/* Image preview */}

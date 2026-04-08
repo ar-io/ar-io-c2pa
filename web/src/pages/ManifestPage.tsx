@@ -1,11 +1,14 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import ManifestDetail from '@/components/ManifestDetail';
 import EmptyState from '@/components/EmptyState';
 
 export default function ManifestPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const decodedId = id ? decodeURIComponent(id) : '';
+  const distanceParam = searchParams.get('distance');
+  const searchDistance = distanceParam !== null ? parseInt(distanceParam, 10) : undefined;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -27,7 +30,7 @@ export default function ManifestPage() {
       </nav>
 
       {decodedId ? (
-        <ManifestDetail manifestId={decodedId} />
+        <ManifestDetail manifestId={decodedId} searchDistance={searchDistance} />
       ) : (
         <EmptyState
           title="No Manifest ID"

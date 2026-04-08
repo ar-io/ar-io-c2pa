@@ -11,6 +11,8 @@ import GatewayImage from './GatewayImage';
 
 interface ManifestDetailProps {
   manifestId: string;
+  /** Distance from the search query (passed from results page). */
+  searchDistance?: number;
 }
 
 function truncateAddress(address: string, chars = 8): string {
@@ -46,7 +48,7 @@ function artifactKindToStatus(kind?: string): 'proof-locator' | 'manifest-store'
 }
 
 
-export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
+export default function ManifestDetail({ manifestId, searchDistance }: ManifestDetailProps) {
   const navigate = useNavigate();
   const [data, setData] = useState<SearchResultItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,16 +107,27 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
       {/* Verification status */}
       <div
         className={`flex items-center gap-3 rounded-2xl border-2 p-4 ${
-          data.distance === 0
+          searchDistance === undefined || searchDistance === 0
             ? 'border-success/30 bg-success-bg'
             : 'border-warning/30 bg-warning-bg'
         }`}
       >
-        <StatusBadge status={data.distance === 0 ? 'verified' : 'similar'} />
+        <StatusBadge
+          status={searchDistance === undefined || searchDistance === 0 ? 'verified' : 'similar'}
+          label={
+            searchDistance === undefined
+              ? 'REGISTERED'
+              : searchDistance === 0
+                ? 'EXACT MATCH'
+                : 'SIMILAR'
+          }
+        />
         <span className="text-sm font-medium text-foreground">
-          {data.distance === 0
-            ? 'Exact match — this manifest is registered on the Arweave permaweb.'
-            : `Similar match — Hamming distance: ${data.distance}`}
+          {searchDistance === undefined
+            ? 'This C2PA manifest is registered on the Arweave permaweb.'
+            : searchDistance === 0
+              ? 'Exact match — this manifest matches your search query.'
+              : `Similar match — Hamming distance: ${searchDistance} (${Math.max(0, Math.min(100, Math.round(((64 - searchDistance) / 64) * 100)))}% similarity)`}
         </span>
       </div>
 
