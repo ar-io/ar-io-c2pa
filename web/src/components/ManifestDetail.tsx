@@ -32,8 +32,11 @@ function formatTimestamp(ts?: string): string {
   }
 }
 
-function viewblockUrl(txId: string): string {
-  return `https://viewblock.io/arweave/tx/${txId}`;
+/** Gateway base URL — same origin the app is served from. */
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || window.location.origin;
+
+function gatewayTxUrl(txId: string): string {
+  return `${GATEWAY_URL}/${txId}`;
 }
 
 function artifactKindToStatus(kind?: string): 'proof-locator' | 'manifest-store' {
@@ -126,7 +129,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
             label="Transaction ID"
             value={
               <a
-                href={viewblockUrl(data.manifestTxId)}
+                href={gatewayTxUrl(data.manifestTxId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
@@ -163,7 +166,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
             label="Arweave"
             value={
               <a
-                href={`https://arweave.net/${data.manifestTxId}`}
+                href={gatewayTxUrl(data.manifestTxId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
