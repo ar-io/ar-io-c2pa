@@ -75,10 +75,16 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-foreground/60">
           {result.ownerAddress && (
-            <span title={result.ownerAddress}>{truncateAddress(result.ownerAddress)}</span>
+            <span title={result.ownerAddress}>
+              <span className="text-foreground/40">Owner:</span> {truncateAddress(result.ownerAddress)}
+            </span>
           )}
           {result.blockTimestamp && <span>{formatTimestamp(result.blockTimestamp)}</span>}
-          {result.claimGenerator && <span>{result.claimGenerator}</span>}
+          {result.claimGenerator && (
+            <span>
+              <span className="text-foreground/40">Generator:</span> {result.claimGenerator}
+            </span>
+          )}
         </div>
       </div>
     </Link>

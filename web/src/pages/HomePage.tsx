@@ -3,23 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { Database, Cpu, Activity } from 'lucide-react';
 import SearchBox, { type SearchParams } from '@/components/SearchBox';
 import { useFileContext } from '@/contexts/FileContext';
-import { checkHealth, getSupportedAlgorithms } from '@/api/client';
-import type { HealthResponse, AlgorithmInfo } from '@/types';
+import { checkHealth, getSupportedAlgorithms, searchSimilar } from '@/api/client';
+import type { HealthResponse, AlgorithmInfo, SearchResultItem } from '@/types';
 
 export default function HomePage() {
   const navigate = useNavigate();
   const { setFile } = useFileContext();
   const [health, setHealth] = useState<HealthResponse['data'] | null>(null);
   const [algorithms, setAlgorithms] = useState<AlgorithmInfo | null>(null);
+  const [examples, setExamples] = useState<SearchResultItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchData() {
       try {
-        const [healthRes, algRes] = await Promise.allSettled([
+        const [healthRes, algRes, examplesRes] = await Promise.allSettled([
           checkHealth(),
           getSupportedAlgorithms(),
+          searchSimilar('0000000000000000', { threshold: 64, limit: 3 }),
         ]);
 
         if (cancelled) return;
@@ -29,6 +31,18 @@ export default function HomePage() {
         }
         if (algRes.status === 'fulfilled') {
           setAlgorithms(algRes.value);
+        }
+        if (examplesRes.status === 'fulfilled' && examplesRes.value.data.results.length > 0) {
+          // Pick up to 3 unique manifests with different pHash distances
+          const seen = new Set<string>();
+          const unique: SearchResultItem[] = [];
+          for (const r of examplesRes.value.data.results) {
+            if (r.manifestId && !seen.has(r.manifestId)) {
+              seen.add(r.manifestId);
+              unique.push(r);
+            }
+          }
+          setExamples(unique.slice(0, 3));
         }
       } catch {
         // Stats are non-critical; silently ignore
@@ -78,6 +92,38 @@ export default function HomePage() {
       <div className="mx-auto mt-8 max-w-2xl">
         <SearchBox onSearch={handleSearch} />
       </div>
+
+      {/* Example searches */}
+      {examples.length > 0 && (
+        <div className="mx-auto mt-6 max-w-2xl">
+          <p className="mb-2 text-center text-xs font-medium uppercase tracking-wide text-foreground/40">
+            Try an example
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {examples.map((ex) => (
+              <button
+                key={ex.manifestId}
+                type="button"
+                onClick={() =>
+                  navigate(`/manifest/${encodeURIComponent(ex.manifestId!)}`)
+                }
+                className="rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-foreground/70 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary hover:shadow-sm"
+              >
+                {ex.manifestId!.slice(0, 28)}...
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() =>
+                navigate(`/results?type=phash&phash=e8f0fcc0f0f0f0f0`)
+              }
+              className="rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-foreground/70 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary hover:shadow-sm"
+            >
+              pHash: e8f0fcc0f0f0f0f0
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats section */}
       <div className="mt-16 grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-3">
