@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, Search } from 'lucide-react';
-import { getManifest } from '@/api/client';
-import type { ManifestResponse } from '@/types';
+import { lookupManifestMetadata } from '@/api/client';
+import type { SearchResultItem } from '@/types';
 import Spinner from './Spinner';
 import EmptyState from './EmptyState';
 import ProvenanceRow from './ProvenanceRow';
@@ -41,32 +41,10 @@ function artifactKindToStatus(kind?: string): 'proof-locator' | 'manifest-store'
   return 'manifest-store';
 }
 
-/** Render a pHash as an 8x8 grid of colored cells. */
-function PHashGrid({ phash }: { phash: string }) {
-  // Convert hex pHash to binary string
-  let binary = '';
-  for (const char of phash) {
-    binary += parseInt(char, 16).toString(2).padStart(4, '0');
-  }
-  // Ensure we have exactly 64 bits
-  binary = binary.slice(0, 64).padEnd(64, '0');
-
-  return (
-    <div className="inline-grid grid-cols-8 gap-px overflow-hidden rounded-lg border border-border">
-      {binary.split('').map((bit, i) => (
-        <div
-          key={i}
-          className={`h-5 w-5 ${bit === '1' ? 'bg-primary' : 'bg-card'}`}
-          title={`Bit ${i}: ${bit}`}
-        />
-      ))}
-    </div>
-  );
-}
 
 export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
   const navigate = useNavigate();
-  const [data, setData] = useState<ManifestResponse['data'] | null>(null);
+  const [data, setData] = useState<SearchResultItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,11 +52,11 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
     setLoading(true);
     setError(null);
     try {
-      const response = await getManifest(manifestId);
-      if (response.success && response.data) {
-        setData(response.data);
+      const result = await lookupManifestMetadata(manifestId);
+      if (result) {
+        setData(result);
       } else {
-        setError('Manifest data unavailable');
+        setError('Manifest not found in the index');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load manifest');
@@ -105,14 +83,9 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
     );
   }
 
-  // Extract phash from assertions if available
-  const phashAssertion = data.assertions?.find(
-    (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
-  ) as Record<string, unknown> | undefined;
-  const phashValue =
-    phashAssertion?.value !== undefined
-      ? String((phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '')
-      : '';
+  // Compute pHash hex from distance=0 search result (the manifestId matched)
+  // The search endpoint doesn't return the raw pHash hex, but we can derive it
+  // from the soft binding value if we had it. For now, show what we have.
 
   return (
     <div className="space-y-8">
@@ -123,14 +96,32 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
         </p>
       </div>
 
+      {/* Verification status */}
+      <div
+        className={`flex items-center gap-3 rounded-2xl border p-4 ${
+          data.distance === 0
+            ? 'border-success/30 bg-success-bg'
+            : 'border-warning/30 bg-warning-bg'
+        }`}
+      >
+        <StatusBadge status={data.distance === 0 ? 'verified' : 'similar'} />
+        <span className="text-sm font-medium text-foreground">
+          {data.distance === 0
+            ? 'Exact match — this manifest is registered on the Arweave permaweb.'
+            : `Similar match — Hamming distance: ${data.distance}`}
+        </span>
+      </div>
+
       <div className="rounded-2xl border border-border bg-card p-6">
         <dl>
-          <ProvenanceRow
-            label="Manifest ID"
-            value={data.manifestId}
-            mono
-            copyValue={data.manifestId}
-          />
+          {data.manifestId && (
+            <ProvenanceRow
+              label="Manifest ID"
+              value={data.manifestId}
+              mono
+              copyValue={data.manifestId}
+            />
+          )}
           <ProvenanceRow
             label="Transaction ID"
             value={
@@ -168,85 +159,39 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
           {data.blockHeight !== undefined && (
             <ProvenanceRow label="Block Height" value={String(data.blockHeight)} mono />
           )}
+          <ProvenanceRow
+            label="Arweave"
+            value={
+              <a
+                href={`https://arweave.net/${data.manifestTxId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
+              >
+                <span>View on Arweave</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            }
+          />
         </dl>
       </div>
 
-      {/* Soft Bindings / pHash section */}
-      {phashValue && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">
-            Perceptual Hash (pHash)
-          </h3>
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <PHashGrid phash={phashValue} />
-            <div className="space-y-3">
-              <ProvenanceRow label="pHash" value={phashValue} mono copyValue={phashValue} />
-              <Link
-                to={`/results?type=phash&phash=${encodeURIComponent(phashValue)}`}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
-              >
-                <Search className="h-4 w-4" />
-                Find Similar
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Ingredients section */}
-      {data.ingredients && data.ingredients.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Ingredients</h3>
-          <div className="space-y-3">
-            {data.ingredients.map((ingredient, i) => {
-              const ing = ingredient as Record<string, unknown>;
-              return (
-                <div key={i} className="rounded-xl border border-foreground/5 bg-white p-4">
-                  {Boolean(ing['title']) && (
-                    <p className="text-sm font-medium text-foreground">{String(ing['title'])}</p>
-                  )}
-                  {Boolean(ing['format']) && (
-                    <p className="text-xs text-foreground/60">{String(ing['format'])}</p>
-                  )}
-                  {Boolean(ing['manifestId']) && (
-                    <Link
-                      to={`/manifest/${encodeURIComponent(String(ing['manifestId']))}`}
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover"
-                    >
-                      <span className="font-mono">{String(ing['manifestId']).slice(0, 30)}...</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Assertions section */}
-      {data.assertions && data.assertions.length > 0 && (
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Assertions</h3>
-          <div className="space-y-2">
-            {data.assertions.map((assertion, i) => {
-              const a = assertion as Record<string, unknown>;
-              return (
-                <div key={i} className="rounded-xl border border-foreground/5 bg-white p-4">
-                  <p className="text-sm font-medium text-foreground">
-                    {String(a['label'] || `Assertion ${i + 1}`)}
-                  </p>
-                  {Boolean(a['data']) && (
-                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-card p-3 font-mono text-xs text-foreground/70">
-                      {JSON.stringify(a['data'], null, 2)}
-                    </pre>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Find similar section */}
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h3 className="mb-4 font-heading text-lg font-bold text-foreground">
+          Similarity Search
+        </h3>
+        <p className="mb-4 text-sm text-foreground/60">
+          Find other C2PA manifests with similar perceptual hashes.
+        </p>
+        <Link
+          to={`/results?type=manifest&manifestId=${encodeURIComponent(data.manifestId || data.manifestTxId)}`}
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+        >
+          <Search className="h-4 w-4" />
+          Find Similar Manifests
+        </Link>
+      </div>
     </div>
   );
 }

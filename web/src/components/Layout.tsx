@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Shield, Github, ExternalLink } from 'lucide-react';
+import { Github, ExternalLink } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -14,10 +14,10 @@ export default function Layout({ children }: LayoutProps) {
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-background via-background to-lavender">
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2.5 text-foreground hover:text-primary">
-            <Shield className="h-6 w-6 text-primary" strokeWidth={2.25} />
-            <span className="font-heading text-xl font-semibold tracking-tight">
-              AR.IO <span className="text-primary">C2PA</span>
+          <Link to="/" className="flex items-center gap-3 text-foreground hover:opacity-80">
+            <img src={`${import.meta.env.BASE_URL}ario-logo.svg`} alt="ar.io" className="h-7" />
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+              C2PA Verify
             </span>
           </Link>
 
@@ -31,6 +31,15 @@ export default function Layout({ children }: LayoutProps) {
               Verify
             </Link>
             <a
+              href="https://ar.io/provenance/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm font-medium text-foreground-muted hover:text-foreground"
+            >
+              About
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+            <a
               href="https://docs.ar.io"
               target="_blank"
               rel="noopener noreferrer"
@@ -40,7 +49,7 @@ export default function Layout({ children }: LayoutProps) {
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
             <a
-              href="https://github.com/ar-io"
+              href="https://github.com/ar-io/ar-io-c2pa"
               target="_blank"
               rel="noopener noreferrer"
               className="text-foreground-muted hover:text-foreground"

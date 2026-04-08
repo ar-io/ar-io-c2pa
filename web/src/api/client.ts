@@ -6,7 +6,9 @@ import type {
   AlgorithmInfo,
 } from '@/types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api`;
 
 class ApiError extends Error {
   constructor(
@@ -66,12 +68,8 @@ export async function searchSimilar(
   opts?: { threshold?: number; limit?: number }
 ): Promise<SearchResult> {
   const params = new URLSearchParams({ phash });
-  if (opts?.threshold !== undefined) {
-    params.set('threshold', String(opts.threshold));
-  }
-  if (opts?.limit !== undefined) {
-    params.set('limit', String(opts.limit));
-  }
+  params.set('threshold', String(opts?.threshold ?? 10));
+  params.set('limit', String(opts?.limit ?? 50));
   return request<SearchResult>(`/v1/search-similar?${params.toString()}`);
 }
 
@@ -122,6 +120,39 @@ export async function getManifest(manifestId: string): Promise<ManifestResponse>
   return request<ManifestResponse>(`/v1/manifests/${encodeURIComponent(manifestId)}`, {
     redirect: 'follow',
   });
+}
+
+/**
+ * Look up manifest metadata via the search endpoint.
+ * Tries txId search first, then falls back to byBinding lookup.
+ */
+export async function lookupManifestMetadata(
+  manifestId: string,
+): Promise<SearchResult['data']['results'][0] | null> {
+  // Try searching by txId (works if manifestId is actually a TX id)
+  try {
+    const result = await request<SearchResult>(
+      `/v1/search-similar?txId=${encodeURIComponent(manifestId)}&threshold=0&limit=1`,
+    );
+    if (result.data.results.length > 0) {
+      return result.data.results[0]!;
+    }
+  } catch {
+    // txId search failed, try broader search
+  }
+
+  // Try searching with threshold=64 (match anything) then filter by manifestId
+  try {
+    const result = await request<SearchResult>(
+      `/v1/search-similar?phash=0000000000000000&threshold=64&limit=100`,
+    );
+    const match = result.data.results.find((r) => r.manifestId === manifestId);
+    if (match) return match;
+  } catch {
+    // search failed
+  }
+
+  return null;
 }
 
 export async function getSupportedAlgorithms(): Promise<AlgorithmInfo> {
