@@ -18,20 +18,24 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback((file: File) => {
-    setSelectedFile(file);
+  const handleFile = useCallback(
+    (file: File) => {
+      setSelectedFile(file);
+      onFile(file);
 
-    // Generate thumbnail preview
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setPreview(null);
-    }
-  }, []);
+      // Generate thumbnail preview
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setPreview(null);
+      }
+    },
+    [onFile],
+  );
 
   const handleDragOver = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
