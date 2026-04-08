@@ -7,6 +7,7 @@ import Spinner from './Spinner';
 import EmptyState from './EmptyState';
 import ProvenanceRow from './ProvenanceRow';
 import StatusBadge from './StatusBadge';
+import GatewayImage from './GatewayImage';
 
 interface ManifestDetailProps {
   manifestId: string;
@@ -90,6 +91,8 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
   // The search endpoint doesn't return the raw pHash hex, but we can derive it
   // from the soft binding value if we had it. For now, show what we have.
 
+  const isImage = data.contentType?.startsWith('image/');
+
   return (
     <div className="space-y-8">
       <div>
@@ -114,6 +117,20 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
             : `Similar match — Hamming distance: ${data.distance}`}
         </span>
       </div>
+
+      {/* Two-column layout: image preview + provenance */}
+      <div className={`grid gap-8 ${isImage ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
+        {/* Image preview */}
+        {isImage && (
+          <div className="overflow-hidden rounded-2xl border border-border">
+            <GatewayImage
+              txId={data.manifestTxId}
+              contentType={data.contentType}
+              alt={data.manifestId || data.manifestTxId}
+              className="aspect-square w-full"
+            />
+          </div>
+        )}
 
       <div className="rounded-2xl border border-border bg-card p-6">
         <dl>
@@ -178,6 +195,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
           />
         </dl>
       </div>
+      </div>{/* end grid */}
 
       {/* Find similar section */}
       <div className="rounded-2xl border border-border bg-card p-6">

@@ -4,6 +4,7 @@ import type { SearchResultItem } from '@/types';
 import SimilarityBar from './SimilarityBar';
 import StatusBadge from './StatusBadge';
 import CopyButton from './CopyButton';
+import GatewayImage from './GatewayImage';
 
 interface MatchCardProps {
   result: SearchResultItem;
@@ -35,40 +36,50 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
   return (
     <Link
       to={`/manifest/${encodeURIComponent(manifestLinkId)}`}
-      className="block rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md"
+      className="block overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-md"
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {isExactMatch ? (
-            <StatusBadge status="verified" label="EXACT MATCH" />
-          ) : rank !== undefined ? (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-              #{rank}
-            </span>
-          ) : null}
-          {result.contentType && (
-            <span className="text-xs text-foreground/50">{result.contentType}</span>
-          )}
+      {/* Image preview */}
+      <GatewayImage
+        txId={result.manifestTxId}
+        contentType={result.contentType}
+        alt={result.manifestId || result.manifestTxId}
+        className="aspect-[4/3] w-full"
+      />
+
+      <div className="p-5">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {isExactMatch ? (
+              <StatusBadge status="verified" label="EXACT MATCH" />
+            ) : rank !== undefined ? (
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                #{rank}
+              </span>
+            ) : null}
+            {result.contentType && (
+              <span className="text-xs text-foreground/50">{result.contentType}</span>
+            )}
+          </div>
+          <ExternalLink className="h-4 w-4 text-foreground/30" />
         </div>
-        <ExternalLink className="h-4 w-4 text-foreground/30" />
-      </div>
 
-      <div className="mb-3 flex items-center gap-1">
-        <FileCheck className="h-4 w-4 shrink-0 text-primary" />
-        <span className="min-w-0 truncate font-mono text-sm text-foreground">
-          {result.manifestId || result.manifestTxId}
-        </span>
-        <CopyButton value={result.manifestId || result.manifestTxId} />
-      </div>
+        <div className="mb-3 flex items-center gap-1">
+          <FileCheck className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 truncate font-mono text-sm text-foreground">
+            {result.manifestId || result.manifestTxId}
+          </span>
+          <CopyButton value={result.manifestId || result.manifestTxId} />
+        </div>
 
-      <SimilarityBar distance={result.distance} />
+        <SimilarityBar distance={result.distance} />
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/50">
-        {result.ownerAddress && (
-          <span title={result.ownerAddress}>{truncateAddress(result.ownerAddress)}</span>
-        )}
-        {result.blockTimestamp && <span>{formatTimestamp(result.blockTimestamp)}</span>}
-        {result.claimGenerator && <span>{result.claimGenerator}</span>}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/50">
+          {result.ownerAddress && (
+            <span title={result.ownerAddress}>{truncateAddress(result.ownerAddress)}</span>
+          )}
+          {result.blockTimestamp && <span>{formatTimestamp(result.blockTimestamp)}</span>}
+          {result.claimGenerator && <span>{result.claimGenerator}</span>}
+        </div>
       </div>
     </Link>
   );
