@@ -1,0 +1,1471 @@
+openapi: 3.0.3
+info:
+  title: AR.IO C2PA Sidecar API
+  version: 1.0.0
+  description: |
+    The AR.IO C2PA Trusthash Sidecar is a C2PA manifest repository, COSE signing
+    oracle, and perceptual-hash similarity search service designed to run alongside
+    an AR.IO Arweave gateway.
+
+    It indexes C2PA Content Credentials delivered via gateway webhooks using
+    Arweave ANS-104 transaction tags (no JUMBF parsing required) and exposes the
+    C2PA Soft Binding Resolution (SBR) API for resolving manifests by binding
+    value, uploaded content, or remote reference URL.
+
+    **Core capabilities:**
+    - **Manifest Repository** -- stores and resolves C2PA manifest-store and
+      proof-locator artifacts indexed from Arweave transactions.
+    - **Soft Binding Resolution (SBR)** -- implements the C2PA 2.3 SBR API
+      (byBinding, byContent, byReference) plus a non-standard byReference
+      extension for server-side remote image fetching.
+    - **pHash Similarity Search** -- DuckDB-backed Hamming distance search over
+      64-bit perceptual hashes stored as float vectors.
+    - **COSE Signing Oracle** -- feature-gated ECDSA signing service for C2PA
+      manifest creation and CAWG identity assertions.
+
+    **Supported soft binding algorithms:**
+    - `org.ar-io.phash` -- perceptual hash (byBinding + byContent, computable)
+    - `io.iscc.v0` -- ISCC image code (byBinding + byContent, computable)
+
+  contact:
+    name: AR.IO
+    url: https://ar.io
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: /
+    description: Current gateway
+
+tags:
+  - name: Health
+    description: Service health and info endpoints
+  - name: Search
+    description: pHash similarity search (non-standard extension)
+  - name: SBR
+    description: C2PA Soft Binding Resolution API (v2.2 spec endpoints)
+  - name: Manifests
+    description: C2PA manifest repository
+  - name: Services
+    description: Service metadata (supported algorithms)
+  - name: Signing
+    description: COSE signing oracle and certificate endpoints (feature-gated via ENABLE_SIGNING)
+  - name: Webhook
+    description: Internal gateway webhook receiver
+
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Service info
+      description: |
+        Returns the service name, version, description, and a list of available
+        endpoints. Useful as a root-level discovery endpoint.
+      operationId: getServiceInfo
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceInfo'
+              example:
+                name: Trusthash Sidecar
+                version: '0.1.0'
+                description: >-
+                  C2PA manifest repository, soft binding API, and pHash
+                  similarity search for Arweave
+                endpoints:
+                  health: GET /health
+                  search: GET /v1/search-similar
+                  matches: GET/POST /v1/matches/*
+                  manifests: GET /v1/manifests/:manifestId
+                  services: GET /v1/services/supportedAlgorithms
+                  sign: POST /v1/sign
+                  cert: GET /v1/cert
+                  webhook: POST /webhook
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: |
+        Returns the overall service health status, database connectivity, and
+        the number of indexed manifests. Returns HTTP 200 when healthy and
+        HTTP 503 when degraded or unhealthy.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                success: true
+                data:
+                  status: ok
+                  timestamp: '2025-01-15T12:00:00.000Z'
+                  version: '0.1.0'
+                  services:
+                    database: healthy
+                  stats:
+                    indexedManifests: 1234
+        '503':
+          description: Service is degraded or unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                success: false
+                data:
+                  status: error
+                  timestamp: '2025-01-15T12:00:00.000Z'
+                  version: '0.1.0'
+                  services:
+                    database: unhealthy
+                  stats:
+                    indexedManifests: 0
+
+  /webhook:
+    get:
+      tags: [Webhook]
+      summary: Webhook endpoint health
+      description: |
+        Returns a simple readiness response confirming the webhook endpoint is
+        reachable. Can be used by the gateway to validate connectivity before
+        sending notifications.
+      operationId: getWebhookStatus
+      responses:
+        '200':
+          description: Webhook endpoint is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookStatus'
+              example:
+                status: ready
+                endpoint: /webhook
+                accepts:
+                  - POST
+                description: >-
+                  AR.IO gateway webhook receiver for pHash-tagged transactions
+
+    post:
+      tags: [Webhook]
+      summary: Receive gateway webhook
+      description: |
+        Receives transaction index notifications from the AR.IO gateway. Accepts
+        either a single webhook payload object or an array for batch processing.
+
+        The gateway sends a notification when a transaction matching the
+        `WEBHOOK_INDEX_FILTER` is indexed. The sidecar validates that the
+        transaction carries C2PA protocol tags, extracts soft binding values
+        (pHash, ISCC), and upserts the artifact into DuckDB.
+
+        **Note:** This endpoint always returns HTTP 200, even on processing
+        errors, to prevent the gateway from retrying.
+      operationId: postWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/WebhookPayload'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/WebhookPayload'
+                  description: Batch of webhook payloads
+            examples:
+              single:
+                summary: Single transaction notification
+                value:
+                  tx_id: abc123def456abc123def456abc123def456abc123
+                  tags:
+                    - name: Protocol
+                      value: C2PA-Manifest-Proof
+                    - name: C2PA-Storage-Mode
+                      value: full
+                    - name: C2PA-Manifest-ID
+                      value: 'urn:c2pa:example-manifest-id'
+                    - name: C2PA-Soft-Binding-Alg
+                      value: org.ar-io.phash
+                    - name: C2PA-Soft-Binding-Value
+                      value: dGVzdHBoYXNo
+                  owner: xyz789owner
+                  block_height: 1500000
+              batch:
+                summary: Batch of transactions
+                value:
+                  - tx_id: abc123def456abc123def456abc123def456abc123
+                    tags:
+                      - name: Protocol
+                        value: C2PA-Manifest-Proof
+                      - name: C2PA-Storage-Mode
+                        value: full
+                      - name: C2PA-Manifest-ID
+                        value: 'urn:c2pa:manifest-1'
+                    owner: xyz789owner
+                    block_height: 1500000
+                  - tx_id: def456abc123def456abc123def456abc123def456
+                    tags:
+                      - name: Protocol
+                        value: C2PA-Manifest-Proof
+                      - name: C2PA-Storage-Mode
+                        value: proof
+                      - name: C2PA-Manifest-ID
+                        value: 'urn:c2pa:manifest-2'
+                    owner: xyz789owner
+                    block_height: 1500001
+      responses:
+        '200':
+          description: Webhook processed (always returns 200)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/WebhookSingleResponse'
+                  - $ref: '#/components/schemas/WebhookBatchResponse'
+              examples:
+                single_success:
+                  summary: Single payload indexed
+                  value:
+                    success: true
+                    data:
+                      txId: abc123def456abc123def456abc123def456abc123
+                      action: indexed
+                      reason: null
+                single_skipped:
+                  summary: Single payload skipped (missing tags)
+                  value:
+                    success: true
+                    data:
+                      txId: abc123def456abc123def456abc123def456abc123
+                      action: skipped
+                      reason: Missing required tag C2PA-Storage-Mode
+                batch_result:
+                  summary: Batch result
+                  value:
+                    success: true
+                    data:
+                      total: 2
+                      indexed: 1
+                      skipped: 1
+                      errors: 0
+                    results:
+                      - txId: abc123def456abc123def456abc123def456abc123
+                        action: indexed
+                        reason: null
+                      - txId: def456abc123def456abc123def456abc123def456
+                        action: skipped
+                        reason: Missing required tag C2PA-Manifest-ID
+
+  /v1/search-similar:
+    get:
+      tags: [Search]
+      summary: pHash similarity search
+      description: |
+        Search for similar images by perceptual hash (pHash) using Hamming
+        distance. Provide either a raw pHash value or a transaction ID of an
+        already-indexed manifest to use as the query vector.
+
+        The pHash can be specified as a 64-character binary string or a
+        16-character hexadecimal string.
+      operationId: searchSimilar
+      parameters:
+        - in: query
+          name: phash
+          required: false
+          schema:
+            type: string
+          description: |
+            64-character binary string (e.g. `1010...`) or 16-character hex
+            string. Required if `txId` is not provided.
+          example: a0b1c2d3e4f56789
+        - in: query
+          name: txId
+          required: false
+          schema:
+            type: string
+          description: |
+            Transaction ID of an existing indexed manifest. The pHash stored
+            for this transaction is used as the query vector. Required if
+            `phash` is not provided.
+          example: abc123def456abc123def456abc123def456abc123
+        - in: query
+          name: threshold
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 64
+            default: 10
+          description: Maximum Hamming distance (0 = exact match, 64 = maximum distance)
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Maximum number of results to return
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              example:
+                success: true
+                data:
+                  query:
+                    phash: a0b1c2d3e4f56789
+                    threshold: 10
+                    limit: 10
+                  results:
+                    - manifestTxId: abc123def456abc123def456abc123def456abc123
+                      manifestId: 'urn:c2pa:example-manifest-id'
+                      distance: 3
+                      contentType: image/jpeg
+                      ownerAddress: xyz789owner
+                  total: 1
+        '400':
+          description: Invalid parameters (missing phash/txId, bad format, out-of-range values)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_param:
+                  summary: Neither phash nor txId provided
+                  value:
+                    success: false
+                    error: Either phash or txId query parameter is required
+                bad_format:
+                  summary: Invalid pHash format
+                  value:
+                    success: false
+                    error: 'Invalid pHash format: xyz'
+        '404':
+          description: Referenced transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: 'Manifest not found: abc123'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/search-similar/stats:
+    get:
+      tags: [Search]
+      summary: Search index statistics
+      description: |
+        Returns statistics about the pHash search index, including the total
+        number of indexed manifests and the current index status.
+      operationId: getSearchStats
+      responses:
+        '200':
+          description: Index statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchStatsResponse'
+              example:
+                success: true
+                data:
+                  totalManifests: 1234
+                  indexStatus: active
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/matches/byBinding:
+    get:
+      tags: [SBR]
+      summary: Resolve by soft binding value
+      description: |
+        Algorithm-agnostic exact-match lookup. Searches both the gateway GraphQL
+        tag index and the local `soft_bindings` DuckDB table, then merges and
+        deduplicates results.
+
+        This is a C2PA SBR API v2.2 spec-defined endpoint.
+      operationId: getByBinding
+      parameters:
+        - in: query
+          name: alg
+          required: true
+          schema:
+            type: string
+          description: |
+            Algorithm identifier per C2PA SBAL (e.g. `org.ar-io.phash`,
+            `io.iscc.v0`)
+          example: org.ar-io.phash
+        - in: query
+          name: value
+          required: true
+          schema:
+            type: string
+          description: Base64-encoded soft binding value
+          example: oLHC0+T1Z4k=
+        - in: query
+          name: maxResults
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Maximum number of results to return
+      responses:
+        '200':
+          description: Matching manifests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftBindingQueryResult'
+              example:
+                matches:
+                  - manifestId: 'urn:c2pa:example-manifest-id'
+                    endpoint: https://c2pa.example.com/v1
+        '400':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: alg and value query parameters are required
+        '502':
+          description: Upstream GraphQL resolution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [SBR]
+      summary: Resolve by soft binding value (body form)
+      description: |
+        Same as the GET variant but accepts `alg`, `value`, and `maxResults` in
+        the JSON body. Useful when the binding value exceeds URL length limits.
+
+        This is a C2PA SBR API v2.2 spec-defined endpoint.
+      operationId: postByBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoftBindingQuery'
+            example:
+              alg: org.ar-io.phash
+              value: oLHC0+T1Z4k=
+              maxResults: 10
+      responses:
+        '200':
+          description: Matching manifests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftBindingQueryResult'
+        '400':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: alg and value are required in the request body
+        '502':
+          description: Upstream GraphQL resolution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/matches/byContent:
+    post:
+      tags: [SBR]
+      summary: Resolve by uploaded content
+      description: |
+        Computes a fingerprint from the uploaded image and searches the local
+        database for matching manifests. Currently supports `image/*` content
+        types only.
+
+        The default algorithm is `org.ar-io.phash`. The `alg` query parameter
+        can override this. Alternatively, `hintAlg` and `hintValue` can bypass
+        fingerprint computation and search directly with the provided values.
+
+        This is a C2PA SBR API v2.2 spec-defined endpoint.
+      operationId: postByContent
+      parameters:
+        - in: query
+          name: alg
+          required: false
+          schema:
+            type: string
+            default: org.ar-io.phash
+          description: Soft binding algorithm to use for fingerprint computation
+        - in: query
+          name: hintAlg
+          required: false
+          schema:
+            type: string
+          description: |
+            Skip computation and search with this algorithm directly. Must be
+            paired with `hintValue`.
+        - in: query
+          name: hintValue
+          required: false
+          schema:
+            type: string
+          description: |
+            Skip computation and search with this value directly. Must be
+            paired with `hintAlg`.
+        - in: query
+          name: maxResults
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Maximum number of results to return
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+          image/gif:
+            schema:
+              type: string
+              format: binary
+          image/tiff:
+            schema:
+              type: string
+              format: binary
+          image/avif:
+            schema:
+              type: string
+              format: binary
+          image/heif:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Matching manifests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftBindingQueryResult'
+              example:
+                matches:
+                  - manifestId: 'urn:c2pa:example-manifest-id'
+                    similarityScore: 95
+        '400':
+          description: Invalid request (empty body, invalid image, unsupported algorithm)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                empty_body:
+                  summary: Empty request body
+                  value:
+                    success: false
+                    error: Request body is empty
+                invalid_image:
+                  summary: Corrupt or invalid image data
+                  value:
+                    success: false
+                    error: 'Invalid image: unsupported format'
+                unsupported_alg:
+                  summary: Algorithm not computable from content
+                  value:
+                    success: false
+                    error: >-
+                      Content-based computation not supported for algorithm:
+                      foo.bar. Supported: org.ar-io.phash, io.iscc.v0
+        '413':
+          description: Image exceeds the configured MAX_IMAGE_SIZE_MB limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Content size exceeds 10MB limit
+        '415':
+          description: Non-image content type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: >-
+                  Unsupported content type: application/pdf. Supported types:
+                  image/jpeg, image/png, image/webp, image/gif, image/tiff,
+                  image/avif, image/heif
+
+  /v1/matches/byReference:
+    post:
+      tags: [SBR]
+      summary: Resolve by reference URL (non-standard extension)
+      description: |
+        **This endpoint is a non-standard extension not defined in the C2PA SBR
+        API specification.**
+
+        Fetches a remote image by URL, computes a fingerprint, and searches the
+        local database for matching manifests. Image content types only.
+
+        The endpoint can be disabled via the `ENABLE_BY_REFERENCE` configuration
+        flag, in which case it returns HTTP 501.
+      operationId: postByReference
+      x-c2pa-extension: true
+      parameters:
+        - in: query
+          name: maxResults
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Maximum number of results to return
+        - in: query
+          name: alg
+          required: false
+          schema:
+            type: string
+            default: org.ar-io.phash
+          description: Soft binding algorithm to use for fingerprint computation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ByReferenceRequest'
+            example:
+              referenceUrl: https://example.com/photo.jpg
+              assetType: image/jpeg
+              assetLength: 204800
+      responses:
+        '200':
+          description: Matching manifests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftBindingQueryResult'
+              example:
+                matches:
+                  - manifestId: 'urn:c2pa:example-manifest-id'
+                    similarityScore: 88
+        '400':
+          description: Invalid request (missing URL, invalid image, unsupported algorithm)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_url:
+                  summary: Missing referenceUrl
+                  value:
+                    success: false
+                    error: referenceUrl is required
+                unsupported_alg:
+                  summary: Algorithm not computable
+                  value:
+                    success: false
+                    error: >-
+                      Content-based computation not supported for algorithm:
+                      foo.bar. Supported: org.ar-io.phash, io.iscc.v0
+        '413':
+          description: Remote image exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Content size exceeds 10MB limit
+        '415':
+          description: Remote resource is not an image
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: >-
+                  Unsupported content type: text/html. Supported types:
+                  image/jpeg, image/png, image/webp, image/gif, image/tiff,
+                  image/avif, image/heif
+        '501':
+          description: byReference is disabled by configuration (ENABLE_BY_REFERENCE=false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: byReference is disabled by configuration
+
+  /v1/manifests/{manifestId}:
+    get:
+      tags: [Manifests]
+      summary: Retrieve manifest by ID
+      description: |
+        Multi-step manifest resolution chain. The sidecar attempts resolution in
+        the following order:
+
+        1. **Redirect to fetchUrl** -- if the manifest has a `C2PA-Manifest-Fetch-URL`
+           tag (returns HTTP 302 with `X-Manifest-Resolution: fetch-url`).
+        2. **Redirect to repoUrl** -- if the manifest has a `C2PA-Manifest-Repo-URL`
+           tag (returns HTTP 302 with `X-Manifest-Resolution: repo-url`).
+        3. **Local gateway fetch** -- for `manifest-store` artifacts, fetches the
+           raw transaction data from the local Arweave gateway (returns HTTP 200
+           with `application/c2pa` body).
+        4. **Remote fetch + digest verify** -- for `proof-locator` artifacts,
+           fetches the manifest from the remote URL, verifies the digest, and
+           returns the bytes (with optional ephemeral caching).
+
+        The `X-Manifest-Resolution` response header indicates which resolution
+        path was used.
+      operationId: getManifestById
+      parameters:
+        - in: path
+          name: manifestId
+          required: true
+          schema:
+            type: string
+          description: C2PA manifest ID (typically a URN like `urn:c2pa:...`)
+          example: 'urn:c2pa:example-manifest-id'
+        - in: query
+          name: returnActiveManifest
+          required: false
+          schema:
+            type: boolean
+          description: |
+            When `true`, requests only the active manifest. Currently returns
+            HTTP 501 as JUMBF parsing is not implemented.
+      responses:
+        '200':
+          description: Manifest bytes returned directly
+          headers:
+            X-Manifest-Resolution:
+              description: Resolution path that produced this response
+              schema:
+                type: string
+                enum:
+                  - fallback-manifest-store
+                  - proof-remote-fetch
+                  - proof-remote-cache
+          content:
+            application/c2pa:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: Redirect to the manifest's fetch URL or repository URL
+          headers:
+            Location:
+              description: URL to fetch the manifest from
+              schema:
+                type: string
+                format: uri
+            X-Manifest-Resolution:
+              description: Resolution path that produced this redirect
+              schema:
+                type: string
+                enum:
+                  - fetch-url
+                  - repo-url
+        '400':
+          description: Invalid request (bad manifestId or returnActiveManifest value)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_id:
+                  summary: Missing manifestId
+                  value:
+                    success: false
+                    error: manifestId path parameter is required
+                bad_param:
+                  summary: Invalid returnActiveManifest
+                  value:
+                    success: false
+                    error: returnActiveManifest must be true or false when provided
+        '404':
+          description: Manifest not found in any resolution source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: 'Manifest not found: urn:c2pa:unknown-id'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: returnActiveManifest=true is not supported (JUMBF parsing not implemented)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: >-
+                  returnActiveManifest is not supported. Active manifest
+                  extraction requires JUMBF parsing which is not implemented.
+        '502':
+          description: Upstream proof fetch or digest verification failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: 'Remote manifest digest verification failed'
+        '504':
+          description: Upstream timeout while retrieving remote proof manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Manifest fetch timed out
+
+  /v1/services/supportedAlgorithms:
+    get:
+      tags: [Services]
+      summary: List supported soft binding algorithms
+      description: |
+        Returns the list of soft binding algorithms supported by this sidecar
+        instance, separated into watermark and fingerprint categories as defined
+        by the C2PA SBR API specification.
+      operationId: getSupportedAlgorithms
+      responses:
+        '200':
+          description: Supported algorithms
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftBindingAlgList'
+              example:
+                watermarks: []
+                fingerprints:
+                  - alg: org.ar-io.phash
+                  - alg: io.iscc.v0
+
+  /v1/sign:
+    post:
+      tags: [Signing]
+      summary: Sign COSE Sig_structure bytes
+      description: |
+        Receives raw COSE `Sig_structure` bytes and returns an ECDSA signature.
+        The default output format is IEEE P1363. Pass `?format=der` for DER
+        encoding.
+
+        **Feature-gated:** Returns HTTP 501 when `ENABLE_SIGNING` is `false`.
+      operationId: postSign
+      parameters:
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum:
+              - p1363
+              - der
+          description: |
+            Signature output format. Defaults to IEEE P1363 when omitted.
+            Use `der` for DER-encoded output.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: Raw COSE Sig_structure bytes
+      responses:
+        '200':
+          description: ECDSA signature bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Empty request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Request body is required (COSE Sig_structure bytes)
+        '500':
+          description: Signing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Signing failed
+        '501':
+          description: Signing is disabled (ENABLE_SIGNING=false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Signing is not enabled on this instance
+
+  /v1/cert:
+    get:
+      tags: [Signing]
+      summary: Get X.509 certificate chain
+      description: |
+        Returns the PEM-encoded X.509 certificate chain used by the signing
+        oracle. Clients use this to embed the certificate in C2PA manifests.
+
+        **Feature-gated:** Returns HTTP 501 when `ENABLE_SIGNING` is `false`.
+      operationId: getCert
+      responses:
+        '200':
+          description: PEM-encoded certificate chain
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+              example: |
+                -----BEGIN CERTIFICATE-----
+                MIIBxTCCAWugAwIBAgIUExample...
+                -----END CERTIFICATE-----
+        '500':
+          description: Certificate not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Certificate not configured
+        '501':
+          description: Signing is disabled (ENABLE_SIGNING=false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Signing is not enabled on this instance
+
+  /v1/identity/sign:
+    post:
+      tags: [Signing]
+      summary: CAWG identity assertion signing
+      description: |
+        Verifies Ethereum wallet ownership and signs an identity assertion
+        payload for embedding as a `cawg.identity` C2PA assertion.
+
+        The sidecar acts as a CAWG identity claims aggregator:
+        1. Verifies the wallet signature proves ownership of the claimed address.
+        2. Signs the CBOR-encoded `signer_payload` with the X.509 key (DER format).
+        3. Returns the raw signature bytes for embedding.
+
+        **Feature-gated:** Returns HTTP 501 when `ENABLE_SIGNING` is `false`.
+      operationId: postIdentitySign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentitySignRequest'
+            example:
+              payload: dGVzdC1wYXlsb2Fk
+              walletAddress: '0x1234567890abcdef1234567890abcdef12345678'
+              walletSignature: '0xabc123...'
+              walletMessage: 'Sign this message to prove wallet ownership'
+      responses:
+        '200':
+          description: DER-encoded ECDSA signature bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid JSON body, missing fields, or invalid wallet signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              examples:
+                invalid_json:
+                  summary: Malformed JSON
+                  value:
+                    error: Invalid JSON body
+                missing_fields:
+                  summary: Missing required fields
+                  value:
+                    error: >-
+                      Required fields: payload (base64), walletAddress,
+                      walletSignature, walletMessage
+                invalid_signature:
+                  summary: Invalid wallet signature format
+                  value:
+                    error: Invalid wallet signature
+                invalid_base64:
+                  summary: Payload is not valid base64
+                  value:
+                    error: Payload must be valid base64
+        '403':
+          description: Wallet signature does not match claimed address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Wallet signature does not match claimed address
+        '413':
+          description: Payload exceeds 10 MB size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Payload exceeds size limit
+        '500':
+          description: Identity signing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Identity signing failed
+        '501':
+          description: Signing is disabled (ENABLE_SIGNING=false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningErrorResponse'
+              example:
+                error: Signing is not enabled on this instance
+
+components:
+  schemas:
+    # ── Health & Info ────────────────────────────────────────────────────
+
+    ServiceInfo:
+      type: object
+      required: [name, version, description, endpoints]
+      properties:
+        name:
+          type: string
+          example: Trusthash Sidecar
+        version:
+          type: string
+          example: '0.1.0'
+        description:
+          type: string
+        endpoints:
+          type: object
+          additionalProperties:
+            type: string
+
+    HealthResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required: [status, timestamp, version, services, stats]
+          properties:
+            status:
+              type: string
+              enum: [ok, degraded, error]
+            timestamp:
+              type: string
+              format: date-time
+            version:
+              type: string
+            services:
+              type: object
+              required: [database]
+              properties:
+                database:
+                  type: string
+                  enum: [healthy, unhealthy, unknown]
+            stats:
+              type: object
+              required: [indexedManifests]
+              properties:
+                indexedManifests:
+                  type: integer
+                  minimum: 0
+
+    # ── Webhook ──────────────────────────────────────────────────────────
+
+    WebhookStatus:
+      type: object
+      required: [status, endpoint, accepts, description]
+      properties:
+        status:
+          type: string
+          example: ready
+        endpoint:
+          type: string
+          example: /webhook
+        accepts:
+          type: array
+          items:
+            type: string
+          example: [POST]
+        description:
+          type: string
+
+    WebhookTag:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+
+    WebhookPayload:
+      type: object
+      description: |
+        Transaction notification payload from the AR.IO gateway. Fields have
+        alternate names for compatibility (`tx_id`/`id`, `owner`/`owner_address`,
+        `block_height`/`height`).
+      properties:
+        tx_id:
+          type: string
+          description: Transaction ID
+        id:
+          type: string
+          description: Alternate field for transaction ID
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookTag'
+        owner:
+          type: string
+          description: Owner address
+        owner_address:
+          type: string
+          description: Alternate field for owner address
+        block_height:
+          type: integer
+          description: Block height
+        height:
+          type: integer
+          description: Alternate field for block height
+        block_timestamp:
+          type: integer
+          description: Block timestamp (Unix epoch seconds)
+        timestamp:
+          type: integer
+          description: Alternate field for block timestamp
+
+    WebhookSingleResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required: [txId, action]
+          properties:
+            txId:
+              type: string
+            action:
+              type: string
+              enum: [indexed, skipped, error]
+            reason:
+              type: string
+              nullable: true
+
+    WebhookBatchResponse:
+      type: object
+      required: [success, data, results]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required: [total, indexed, skipped, errors]
+          properties:
+            total:
+              type: integer
+            indexed:
+              type: integer
+            skipped:
+              type: integer
+            errors:
+              type: integer
+        results:
+          type: array
+          items:
+            type: object
+            required: [txId, action]
+            properties:
+              txId:
+                type: string
+              action:
+                type: string
+                enum: [indexed, skipped, error]
+              reason:
+                type: string
+                nullable: true
+
+    # ── Search ───────────────────────────────────────────────────────────
+
+    SearchResultItem:
+      type: object
+      required: [manifestTxId, distance, contentType, ownerAddress]
+      properties:
+        manifestTxId:
+          type: string
+          description: Arweave transaction ID of the manifest
+        manifestId:
+          type: string
+          nullable: true
+          description: C2PA manifest ID (URN), may be null
+        distance:
+          type: integer
+          minimum: 0
+          maximum: 64
+          description: Hamming distance from the query pHash (0 = exact match)
+        contentType:
+          type: string
+          description: MIME type of the original asset
+        ownerAddress:
+          type: string
+          description: Arweave owner address
+
+    SearchResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [query, results, total]
+          properties:
+            query:
+              type: object
+              required: [phash, threshold, limit]
+              properties:
+                phash:
+                  type: string
+                  description: The pHash used for the query
+                threshold:
+                  type: integer
+                  description: Maximum Hamming distance used
+                limit:
+                  type: integer
+                  description: Maximum results requested
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/SearchResultItem'
+            total:
+              type: integer
+              description: Number of results returned
+
+    SearchStatsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [totalManifests, indexStatus]
+          properties:
+            totalManifests:
+              type: integer
+              description: Total number of manifests in the search index
+            indexStatus:
+              type: string
+              description: Current status of the search index
+              enum: [active]
+
+    # ── Soft Binding Resolution (SBR) ────────────────────────────────────
+
+    MatchResult:
+      type: object
+      required: [manifestId]
+      properties:
+        manifestId:
+          type: string
+          description: C2PA manifest ID (URN)
+        endpoint:
+          type: string
+          format: uri
+          description: Alternate SBR API endpoint where this manifest can be found
+        similarityScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Similarity score (0-100), present for content/reference searches.
+            100 = exact match, 0 = maximum distance.
+
+    SoftBindingQuery:
+      type: object
+      required: [alg, value]
+      properties:
+        alg:
+          type: string
+          description: Algorithm identifier (e.g. `org.ar-io.phash`, `io.iscc.v0`)
+        value:
+          type: string
+          description: Base64-encoded soft binding value
+        maxResults:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+
+    SoftBindingQueryResult:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchResult'
+
+    ByReferenceRequest:
+      type: object
+      required: [referenceUrl]
+      properties:
+        referenceUrl:
+          type: string
+          format: uri
+          description: URL of the remote image to fetch and fingerprint
+        assetLength:
+          type: number
+          description: Expected asset size in bytes (optional pre-check against size limit)
+        assetType:
+          type: string
+          description: MIME type hint for the remote asset
+        hintAlg:
+          type: string
+          description: Skip computation and search with this algorithm directly
+        hintValue:
+          type: string
+          description: Skip computation and search with this value directly
+        alg:
+          type: string
+          description: Algorithm to use for computation (overridden by body `alg` or query `alg`)
+
+    SoftBindingAlgList:
+      type: object
+      required: [watermarks, fingerprints]
+      properties:
+        watermarks:
+          type: array
+          items:
+            type: object
+            required: [alg]
+            properties:
+              alg:
+                type: string
+          description: Supported watermark algorithms (currently none)
+        fingerprints:
+          type: array
+          items:
+            type: object
+            required: [alg]
+            properties:
+              alg:
+                type: string
+          description: Supported fingerprint algorithms
+
+    # ── Signing ──────────────────────────────────────────────────────────
+
+    IdentitySignRequest:
+      type: object
+      required: [payload, walletAddress, walletSignature, walletMessage]
+      properties:
+        payload:
+          type: string
+          format: byte
+          description: Base64-encoded CBOR signer_payload to sign
+        walletAddress:
+          type: string
+          description: Ethereum wallet address (0x-prefixed)
+          example: '0x1234567890abcdef1234567890abcdef12345678'
+        walletSignature:
+          type: string
+          description: |
+            Ethereum personal_sign signature proving ownership of `walletAddress`
+          example: '0xabc123...'
+        walletMessage:
+          type: string
+          description: The message that was signed with the wallet
+          example: Sign this message to prove wallet ownership
+
+    SigningErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    # ── Common ───────────────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string

@@ -110,7 +110,7 @@ export default function ResultsPage() {
               <div className="mb-6">
                 <h1 className="font-heading text-2xl font-bold text-foreground">
                   {state.results.length} {state.results.length === 1 ? 'result' : 'results'} found
-                  <span className="ml-2 text-base font-normal text-foreground/50">
+                  <span className="ml-2 text-sm font-normal text-foreground/50">
                     in {state.elapsed}ms
                   </span>
                 </h1>
@@ -119,18 +119,16 @@ export default function ResultsPage() {
               {/* Exact match highlight */}
               {exactMatches.length > 0 && (
                 <div className="mb-8">
-                  <div className="rounded-2xl border-2 border-success/30 bg-success-bg p-6">
-                    <div className="mb-4 flex items-center gap-2">
-                      <ShieldCheck className="h-6 w-6 text-success" />
-                      <span className="font-heading text-lg font-bold text-success">
-                        This image is registered on the Arweave permaweb.
-                      </span>
-                    </div>
-                    <div className="space-y-4">
-                      {exactMatches.map((result) => (
-                        <MatchCard key={result.manifestTxId} result={result} />
-                      ))}
-                    </div>
+                  <div className="mb-4 flex items-center gap-2 rounded-2xl border-2 border-success/30 bg-success-bg p-4">
+                    <ShieldCheck className="h-5 w-5 text-success" />
+                    <span className="text-sm font-semibold text-success">
+                      This image is registered on the Arweave permaweb.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {exactMatches.map((result) => (
+                      <MatchCard key={result.manifestTxId} result={result} />
+                    ))}
                   </div>
                 </div>
               )}
@@ -159,6 +157,14 @@ export default function ResultsPage() {
           title="No Search Query"
           description="Navigate to the home page to search for content provenance."
           action={{ label: 'Go to Search', onClick: () => navigate('/') }}
+        />
+      )}
+
+      {state.status === 'idle' && queryType && (
+        <EmptyState
+          title="Search Expired"
+          description="The uploaded file is no longer available. Please return to the search page and try again."
+          action={{ label: 'Back to Search', onClick: handleTryAgain }}
         />
       )}
     </div>

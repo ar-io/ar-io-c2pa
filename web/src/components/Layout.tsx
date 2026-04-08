@@ -21,7 +21,7 @@ export default function Layout({ children }: LayoutProps) {
             </span>
           </Link>
 
-          <nav className="flex items-center gap-6">
+          <nav className="flex items-center gap-3 sm:gap-6">
             <Link
               to="/"
               className={`text-sm font-medium transition-colors ${
@@ -34,7 +34,7 @@ export default function Layout({ children }: LayoutProps) {
               href="https://ar.io/provenance/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm font-medium text-foreground-muted hover:text-foreground"
+              className="hidden sm:flex items-center gap-1 text-sm font-medium text-foreground-muted hover:text-foreground"
             >
               About
               <ExternalLink className="h-3.5 w-3.5" />
@@ -43,7 +43,7 @@ export default function Layout({ children }: LayoutProps) {
               href="https://docs.ar.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm font-medium text-foreground-muted hover:text-foreground"
+              className="hidden sm:flex items-center gap-1 text-sm font-medium text-foreground-muted hover:text-foreground"
             >
               Docs
               <ExternalLink className="h-3.5 w-3.5" />
@@ -64,7 +64,7 @@ export default function Layout({ children }: LayoutProps) {
       <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">{children}</main>
 
       <footer className="border-t border-border bg-card/50">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-6 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-4 py-6 text-center sm:flex-row sm:justify-between sm:text-left sm:px-6">
           <p className="text-sm text-foreground-muted">
             Powered by{' '}
             <a

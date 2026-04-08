@@ -71,7 +71,7 @@ export default function SearchBox({ onSearch, loading = false }: SearchBoxProps)
           placeholder="Enter manifest ID (urn:uuid:...) or pHash..."
           disabled={loading}
           aria-label="Search query"
-          className="w-full rounded-2xl border border-border bg-card px-4 py-3 pr-24 text-foreground placeholder:text-foreground/40 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none disabled:opacity-60"
+          className="w-full rounded-2xl border border-border bg-card px-4 py-3 pr-24 text-foreground placeholder:text-foreground/40 focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none disabled:opacity-50"
         />
         <button
           type="submit"

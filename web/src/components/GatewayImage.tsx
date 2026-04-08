@@ -40,8 +40,9 @@ export default function GatewayImage({
         <div className="absolute inset-0 animate-pulse bg-foreground/10" />
       )}
       {status === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center text-foreground/20">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/20">
           <ImageOff className="h-8 w-8" />
+          <span className="text-xs">Image unavailable</span>
         </div>
       )}
       <img

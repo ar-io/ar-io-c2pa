@@ -104,7 +104,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
 
       {/* Verification status */}
       <div
-        className={`flex items-center gap-3 rounded-2xl border p-4 ${
+        className={`flex items-center gap-3 rounded-2xl border-2 p-4 ${
           data.distance === 0
             ? 'border-success/30 bg-success-bg'
             : 'border-warning/30 bg-warning-bg'
@@ -119,7 +119,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
       </div>
 
       {/* Two-column layout: image preview + provenance */}
-      <div className={`grid gap-8 ${isImage ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
+      <div className={`grid gap-8 ${isImage ? 'md:grid-cols-[1fr_1fr]' : ''}`}>
         {/* Image preview */}
         {isImage && (
           <div className="overflow-hidden rounded-2xl border border-border">
@@ -207,7 +207,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
         </p>
         <Link
           to={`/results?type=manifest&manifestId=${encodeURIComponent(data.manifestId || data.manifestTxId)}`}
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
         >
           <Search className="h-4 w-4" />
           Find Similar Manifests

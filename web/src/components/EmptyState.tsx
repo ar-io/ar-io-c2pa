@@ -19,7 +19,7 @@ export default function EmptyState({ title, description, action }: EmptyStatePro
         <button
           type="button"
           onClick={action.onClick}
-          className="mt-6 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+          className="mt-6 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           {action.label}
         </button>

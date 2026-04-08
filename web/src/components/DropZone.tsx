@@ -101,7 +101,7 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+      className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none ${
         disabled
           ? 'cursor-not-allowed border-border bg-card/50 opacity-60'
           : isDragOver

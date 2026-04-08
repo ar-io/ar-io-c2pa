@@ -36,14 +36,14 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
   return (
     <Link
       to={`/manifest/${encodeURIComponent(manifestLinkId)}`}
-      className="block overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-md"
+      className="block overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       {/* Image preview */}
       <GatewayImage
         txId={result.manifestTxId}
         contentType={result.contentType}
         alt={result.manifestId || result.manifestTxId}
-        className="aspect-[4/3] w-full"
+        className="aspect-video sm:aspect-[4/3] w-full"
       />
 
       <div className="p-5">
@@ -57,7 +57,7 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
               </span>
             ) : null}
             {result.contentType && (
-              <span className="text-xs text-foreground/50">{result.contentType}</span>
+              <span className="text-xs text-foreground/60">{result.contentType}</span>
             )}
           </div>
           <ExternalLink className="h-4 w-4 text-foreground/30" />
@@ -73,7 +73,7 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
 
         <SimilarityBar distance={result.distance} />
 
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/50">
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-foreground/60">
           {result.ownerAddress && (
             <span title={result.ownerAddress}>{truncateAddress(result.ownerAddress)}</span>
           )}

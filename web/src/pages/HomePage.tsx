@@ -65,7 +65,7 @@ export default function HomePage() {
   return (
     <div className="mx-auto max-w-3xl">
       {/* Hero section */}
-      <div className="pb-8 pt-16 text-center">
+      <div className="pb-8 pt-12 text-center">
         <h1 className="font-heading text-4xl font-bold text-foreground sm:text-5xl">
           Verify Content Provenance
         </h1>
@@ -80,7 +80,7 @@ export default function HomePage() {
       </div>
 
       {/* Stats section */}
-      <div className="mt-16 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-16 grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-3">
         {/* Indexed Manifests */}
         <div className="rounded-2xl border border-border bg-card p-6 text-center transition-all hover:-translate-y-0.5 hover:shadow-md">
           <Database className="mx-auto mb-3 h-6 w-6 text-primary/60" />

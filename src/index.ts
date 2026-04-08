@@ -12,6 +12,7 @@ import softbinding from './routes/softbinding.js';
 import manifests from './routes/manifests.js';
 import services from './routes/services.js';
 import sign from './routes/sign.js';
+import apiDocs from './routes/api-docs.js';
 
 const app = new Hono();
 
@@ -33,6 +34,7 @@ app.route('/v1/matches', softbinding);
 app.route('/v1/manifests', manifests);
 app.route('/v1/services', services);
 app.route('/v1', sign);
+app.route('/api-docs', apiDocs);
 
 // Root endpoint - service info
 app.get('/', (c) => {
