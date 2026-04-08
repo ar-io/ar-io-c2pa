@@ -1,66 +1,52 @@
 import { useEffect, useMemo } from 'react';
-import { useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { useSearch } from '@/hooks/useSearch';
+import { useFileContext } from '@/contexts/FileContext';
 import type { SearchResultItem } from '@/types';
 import MatchCard from '@/components/MatchCard';
 import Spinner from '@/components/Spinner';
 import EmptyState from '@/components/EmptyState';
 
-/** Reconstruct a File from the base64 data URL stored in router state. */
-function dataUrlToFile(dataUrl: string, fileName: string, fileType: string): File {
-  const [header, base64] = dataUrl.split(',');
-  const mime = header?.match(/:(.*?);/)?.[1] || fileType || 'application/octet-stream';
-  const binary = atob(base64 ?? '');
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new File([bytes], fileName, { type: mime });
-}
-
-interface ContentRouterState {
-  type: 'content';
-  fileName: string;
-  fileType: string;
-  fileData: string;
-}
-
-function isContentState(value: unknown): value is ContentRouterState {
-  if (typeof value !== 'object' || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return obj['type'] === 'content' && typeof obj['fileData'] === 'string';
-}
-
 export default function ResultsPage() {
   const [searchParams] = useSearchParams();
-  const location = useLocation();
   const navigate = useNavigate();
+  const { getFile } = useFileContext();
   const { state, searchByContent, searchByPhash, searchByManifest, reset } = useSearch();
 
-  // Determine query type from URL params or router state
+  // Determine query type from URL params
   const queryType = searchParams.get('type');
   const queryPhash = searchParams.get('phash');
-  const routerState = location.state as unknown;
 
-  // Trigger the appropriate search on mount
+  const searchKey =
+    queryType === 'phash'
+      ? `phash:${queryPhash}`
+      : queryType === 'content'
+        ? 'content'
+        : queryType === 'manifest'
+          ? `manifest:${searchParams.get('manifestId')}`
+          : '';
+
+  // Trigger the appropriate search when searchKey changes
   useEffect(() => {
-    // Avoid re-triggering if we already have results or are loading
-    if (state.status === 'results' || state.status === 'loading') return;
+    if (!searchKey) return;
+    reset();
 
     if (queryType === 'phash' && queryPhash) {
       searchByPhash(queryPhash);
+    } else if (queryType === 'content') {
+      const file = getFile();
+      if (file) {
+        searchByContent(file);
+      }
     } else if (queryType === 'manifest') {
       const manifestId = searchParams.get('manifestId');
       if (manifestId) {
         searchByManifest(manifestId);
       }
-    } else if (isContentState(routerState)) {
-      const file = dataUrlToFile(routerState.fileData, routerState.fileName, routerState.fileType);
-      searchByContent(file);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryType, queryPhash, routerState]);
+  }, [searchKey]);
 
   // Separate exact matches (distance === 0) from similar matches
   const { exactMatches, similarMatches } = useMemo(() => {
@@ -87,8 +73,8 @@ export default function ResultsPage() {
   return (
     <div className="mx-auto max-w-4xl">
       {/* Breadcrumb */}
-      <nav className="mb-8 text-sm text-[#23232D]/60">
-        <Link to="/" className="text-[#5427C8] hover:text-[#4520A8]">
+      <nav className="mb-8 text-sm text-foreground/60">
+        <Link to="/" className="text-primary hover:text-primary-hover">
           Home
         </Link>
         <span className="mx-2">&gt;</span>
@@ -122,10 +108,9 @@ export default function ResultsPage() {
             <>
               {/* Results header */}
               <div className="mb-6">
-                <h1 className="font-heading text-2xl font-bold text-[#23232D]">
-                  {state.results.length}{' '}
-                  {state.results.length === 1 ? 'result' : 'results'} found
-                  <span className="ml-2 text-base font-normal text-[#23232D]/50">
+                <h1 className="font-heading text-2xl font-bold text-foreground">
+                  {state.results.length} {state.results.length === 1 ? 'result' : 'results'} found
+                  <span className="ml-2 text-base font-normal text-foreground/50">
                     in {state.elapsed}ms
                   </span>
                 </h1>
@@ -134,19 +119,16 @@ export default function ResultsPage() {
               {/* Exact match highlight */}
               {exactMatches.length > 0 && (
                 <div className="mb-8">
-                  <div className="rounded-2xl border-2 border-[#16A34A]/30 bg-[#F0FDF4] p-6">
+                  <div className="rounded-2xl border-2 border-success/30 bg-success-bg p-6">
                     <div className="mb-4 flex items-center gap-2">
-                      <ShieldCheck className="h-6 w-6 text-[#16A34A]" />
-                      <span className="font-heading text-lg font-bold text-[#16A34A]">
+                      <ShieldCheck className="h-6 w-6 text-success" />
+                      <span className="font-heading text-lg font-bold text-success">
                         This image is registered on the Arweave permaweb.
                       </span>
                     </div>
                     <div className="space-y-4">
                       {exactMatches.map((result) => (
-                        <MatchCard
-                          key={result.manifestTxId}
-                          result={result}
-                        />
+                        <MatchCard key={result.manifestTxId} result={result} />
                       ))}
                     </div>
                   </div>
@@ -156,16 +138,12 @@ export default function ResultsPage() {
               {/* Similar matches */}
               {similarMatches.length > 0 && (
                 <div>
-                  <h2 className="mb-4 font-heading text-lg font-bold text-[#23232D]">
+                  <h2 className="mb-4 font-heading text-lg font-bold text-foreground">
                     Similar Matches
                   </h2>
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                     {similarMatches.map((result, index) => (
-                      <MatchCard
-                        key={result.manifestTxId}
-                        result={result}
-                        rank={index + 1}
-                      />
+                      <MatchCard key={result.manifestTxId} result={result} rank={index + 1} />
                     ))}
                   </div>
                 </div>
@@ -176,15 +154,13 @@ export default function ResultsPage() {
       )}
 
       {/* Idle state (navigated directly without search params) */}
-      {state.status === 'idle' &&
-        !queryType &&
-        !isContentState(routerState) && (
-          <EmptyState
-            title="No Search Query"
-            description="Navigate to the home page to search for content provenance."
-            action={{ label: 'Go to Search', onClick: () => navigate('/') }}
-          />
-        )}
+      {state.status === 'idle' && !queryType && (
+        <EmptyState
+          title="No Search Query"
+          description="Navigate to the home page to search for content provenance."
+          action={{ label: 'Go to Search', onClick: () => navigate('/') }}
+        />
+      )}
     </div>
   );
 }

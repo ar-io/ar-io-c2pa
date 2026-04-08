@@ -5,35 +5,38 @@ interface StatusBadgeProps {
   label?: string;
 }
 
-const statusConfig: Record<BadgeStatus, { bg: string; text: string; border: string; defaultLabel: string }> = {
+const statusConfig: Record<
+  BadgeStatus,
+  { bg: string; text: string; border: string; defaultLabel: string }
+> = {
   verified: {
-    bg: 'bg-[#16A34A]/10',
-    text: 'text-[#16A34A]',
-    border: 'border-[#16A34A]/20',
+    bg: 'bg-success/10',
+    text: 'text-success',
+    border: 'border-success/20',
     defaultLabel: 'Verified',
   },
   similar: {
-    bg: 'bg-[#D97706]/10',
-    text: 'text-[#D97706]',
-    border: 'border-[#D97706]/20',
+    bg: 'bg-warning/10',
+    text: 'text-warning',
+    border: 'border-warning/20',
     defaultLabel: 'Similar',
   },
   unverified: {
-    bg: 'bg-[#DC2626]/10',
-    text: 'text-[#DC2626]',
-    border: 'border-[#DC2626]/20',
+    bg: 'bg-error/10',
+    text: 'text-error',
+    border: 'border-error/20',
     defaultLabel: 'Unverified',
   },
   'proof-locator': {
-    bg: 'bg-[#2563EB]/10',
-    text: 'text-[#2563EB]',
-    border: 'border-[#2563EB]/20',
+    bg: 'bg-info/10',
+    text: 'text-info',
+    border: 'border-info/20',
     defaultLabel: 'Proof Locator',
   },
   'manifest-store': {
-    bg: 'bg-[#5427C8]/10',
-    text: 'text-[#5427C8]',
-    border: 'border-[#5427C8]/20',
+    bg: 'bg-primary/10',
+    text: 'text-primary',
+    border: 'border-primary/20',
     defaultLabel: 'Manifest Store',
   },
 };

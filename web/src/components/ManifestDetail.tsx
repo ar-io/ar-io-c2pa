@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, Search } from 'lucide-react';
 import { getManifest } from '@/api/client';
 import type { ManifestResponse } from '@/types';
@@ -52,11 +52,11 @@ function PHashGrid({ phash }: { phash: string }) {
   binary = binary.slice(0, 64).padEnd(64, '0');
 
   return (
-    <div className="inline-grid grid-cols-8 gap-px overflow-hidden rounded-lg border border-[#23232D]/10">
+    <div className="inline-grid grid-cols-8 gap-px overflow-hidden rounded-lg border border-border">
       {binary.split('').map((bit, i) => (
         <div
           key={i}
-          className={`h-5 w-5 ${bit === '1' ? 'bg-[#5427C8]' : 'bg-[#F0F0F0]'}`}
+          className={`h-5 w-5 ${bit === '1' ? 'bg-primary' : 'bg-card'}`}
           title={`Bit ${i}: ${bit}`}
         />
       ))}
@@ -65,6 +65,7 @@ function PHashGrid({ phash }: { phash: string }) {
 }
 
 export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
+  const navigate = useNavigate();
   const [data, setData] = useState<ManifestResponse['data'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,14 +100,14 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
       <EmptyState
         title="Manifest Not Found"
         description={error || `Could not find manifest: ${manifestId}`}
-        action={{ label: 'Back to Search', onClick: () => window.history.back() }}
+        action={{ label: 'Back to Search', onClick: () => navigate('/') }}
       />
     );
   }
 
   // Extract phash from assertions if available
   const phashAssertion = data.assertions?.find(
-    (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding',
+    (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
   ) as Record<string, unknown> | undefined;
   const phashValue =
     phashAssertion?.value !== undefined
@@ -116,13 +117,13 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="font-heading text-2xl font-bold text-[#23232D]">Content Credentials</h2>
-        <p className="mt-1 text-sm text-[#23232D]/60">
+        <h2 className="font-heading text-2xl font-bold text-foreground">Content Credentials</h2>
+        <p className="mt-1 text-sm text-foreground/60">
           Provenance information for this C2PA manifest
         </p>
       </div>
 
-      <div className="rounded-2xl border border-[#23232D]/10 bg-[#F0F0F0] p-6">
+      <div className="rounded-2xl border border-border bg-card p-6">
         <dl>
           <ProvenanceRow
             label="Manifest ID"
@@ -137,7 +138,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
                 href={viewblockUrl(data.manifestTxId)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[#5427C8] hover:text-[#4520A8]"
+                className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
               >
                 <span className="font-mono">{truncateAddress(data.manifestTxId, 10)}</span>
                 <ExternalLink className="h-3 w-3" />
@@ -172,8 +173,8 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
 
       {/* Soft Bindings / pHash section */}
       {phashValue && (
-        <div className="rounded-2xl border border-[#23232D]/10 bg-[#F0F0F0] p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-[#23232D]">
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">
             Perceptual Hash (pHash)
           </h3>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
@@ -182,7 +183,7 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
               <ProvenanceRow label="pHash" value={phashValue} mono copyValue={phashValue} />
               <Link
                 to={`/results?type=phash&phash=${encodeURIComponent(phashValue)}`}
-                className="inline-flex items-center gap-2 rounded-full bg-[#5427C8] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4520A8]"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
               >
                 <Search className="h-4 w-4" />
                 Find Similar
@@ -194,27 +195,25 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
 
       {/* Ingredients section */}
       {data.ingredients && data.ingredients.length > 0 && (
-        <div className="rounded-2xl border border-[#23232D]/10 bg-[#F0F0F0] p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-[#23232D]">Ingredients</h3>
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Ingredients</h3>
           <div className="space-y-3">
             {data.ingredients.map((ingredient, i) => {
               const ing = ingredient as Record<string, unknown>;
               return (
-                <div key={i} className="rounded-xl border border-[#23232D]/5 bg-white p-4">
+                <div key={i} className="rounded-xl border border-foreground/5 bg-white p-4">
                   {Boolean(ing['title']) && (
-                    <p className="text-sm font-medium text-[#23232D]">{String(ing['title'])}</p>
+                    <p className="text-sm font-medium text-foreground">{String(ing['title'])}</p>
                   )}
                   {Boolean(ing['format']) && (
-                    <p className="text-xs text-[#23232D]/60">{String(ing['format'])}</p>
+                    <p className="text-xs text-foreground/60">{String(ing['format'])}</p>
                   )}
                   {Boolean(ing['manifestId']) && (
                     <Link
                       to={`/manifest/${encodeURIComponent(String(ing['manifestId']))}`}
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-[#5427C8] hover:text-[#4520A8]"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover"
                     >
-                      <span className="font-mono">
-                        {String(ing['manifestId']).slice(0, 30)}...
-                      </span>
+                      <span className="font-mono">{String(ing['manifestId']).slice(0, 30)}...</span>
                       <ExternalLink className="h-3 w-3" />
                     </Link>
                   )}
@@ -227,18 +226,18 @@ export default function ManifestDetail({ manifestId }: ManifestDetailProps) {
 
       {/* Assertions section */}
       {data.assertions && data.assertions.length > 0 && (
-        <div className="rounded-2xl border border-[#23232D]/10 bg-[#F0F0F0] p-6">
-          <h3 className="mb-4 font-heading text-lg font-bold text-[#23232D]">Assertions</h3>
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Assertions</h3>
           <div className="space-y-2">
             {data.assertions.map((assertion, i) => {
               const a = assertion as Record<string, unknown>;
               return (
-                <div key={i} className="rounded-xl border border-[#23232D]/5 bg-white p-4">
-                  <p className="text-sm font-medium text-[#23232D]">
+                <div key={i} className="rounded-xl border border-foreground/5 bg-white p-4">
+                  <p className="text-sm font-medium text-foreground">
                     {String(a['label'] || `Assertion ${i + 1}`)}
                   </p>
                   {Boolean(a['data']) && (
-                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-[#F0F0F0] p-3 font-mono text-xs text-[#23232D]/70">
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-card p-3 font-mono text-xs text-foreground/70">
                       {JSON.stringify(a['data'], null, 2)}
                     </pre>
                   )}

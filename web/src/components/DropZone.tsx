@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 
 import { Upload, Image, X } from 'lucide-react';
 
 interface DropZoneProps {
-  onFile: (file: File) => void;
+  onFile: (file: File | null) => void;
   disabled?: boolean;
 }
 
@@ -18,24 +18,20 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback(
-    (file: File) => {
-      setSelectedFile(file);
-      onFile(file);
+  const handleFile = useCallback((file: File) => {
+    setSelectedFile(file);
 
-      // Generate thumbnail preview
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setPreview(e.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setPreview(null);
-      }
-    },
-    [onFile],
-  );
+    // Generate thumbnail preview
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPreview(null);
+    }
+  }, []);
 
   const handleDragOver = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
@@ -43,7 +39,7 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       e.stopPropagation();
       if (!disabled) setIsDragOver(true);
     },
-    [disabled],
+    [disabled]
   );
 
   const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -61,9 +57,9 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       if (disabled) return;
 
       const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      if (file && file.type.startsWith('image/')) handleFile(file);
     },
-    [disabled, handleFile],
+    [disabled, handleFile]
   );
 
   const handleInputChange = useCallback(
@@ -71,7 +67,7 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       const file = e.target.files?.[0];
       if (file) handleFile(file);
     },
-    [handleFile],
+    [handleFile]
   );
 
   const handleClick = useCallback(() => {
@@ -84,14 +80,16 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       setSelectedFile(null);
       setPreview(null);
       if (inputRef.current) inputRef.current.value = '';
+      onFile(null);
     },
-    [],
+    [onFile]
   );
 
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-label="Upload image file"
       onClick={handleClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') handleClick();
@@ -101,10 +99,10 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
       onDrop={handleDrop}
       className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
         disabled
-          ? 'cursor-not-allowed border-[#23232D]/10 bg-[#F0F0F0]/50 opacity-60'
+          ? 'cursor-not-allowed border-border bg-card/50 opacity-60'
           : isDragOver
             ? 'border-primary bg-primary/5'
-            : 'border-[#23232D]/20 hover:border-[#5427C8]/50 hover:bg-[#5427C8]/5'
+            : 'border-border-strong hover:border-primary/50 hover:bg-primary/5'
       }`}
     >
       <input
@@ -126,16 +124,16 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
               className="h-16 w-16 shrink-0 rounded-lg object-cover"
             />
           ) : (
-            <Image className="h-10 w-10 shrink-0 text-[#23232D]/40" />
+            <Image className="h-10 w-10 shrink-0 text-foreground/40" />
           )}
           <div className="min-w-0 text-left">
-            <p className="truncate text-sm font-medium text-[#23232D]">{selectedFile.name}</p>
-            <p className="text-xs text-[#23232D]/60">{formatFileSize(selectedFile.size)}</p>
+            <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
+            <p className="text-xs text-foreground/60">{formatFileSize(selectedFile.size)}</p>
           </div>
           <button
             type="button"
             onClick={handleClear}
-            className="shrink-0 rounded-full p-1.5 text-[#23232D]/40 transition-colors hover:bg-[#23232D]/10 hover:text-[#23232D]"
+            className="shrink-0 rounded-full p-1.5 text-foreground/40 transition-colors hover:bg-foreground/10 hover:text-foreground"
             aria-label="Remove file"
           >
             <X className="h-4 w-4" />
@@ -143,12 +141,12 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
         </div>
       ) : (
         <div className="flex flex-col items-center gap-2">
-          <Upload className="h-10 w-10 text-[#23232D]/30" />
-          <p className="text-sm text-[#23232D]/70">
+          <Upload className="h-10 w-10 text-foreground/30" />
+          <p className="text-sm text-foreground/70">
             Drag & drop an image or{' '}
-            <span className="font-semibold text-[#5427C8]">click to browse</span>
+            <span className="font-semibold text-primary">click to browse</span>
           </p>
-          <p className="text-xs text-[#23232D]/40">Supports JPEG, PNG, WebP, GIF, TIFF, AVIF</p>
+          <p className="text-xs text-foreground/40">Supports JPEG, PNG, WebP, GIF, TIFF, AVIF</p>
         </div>
       )}
     </div>

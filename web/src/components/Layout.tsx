@@ -11,9 +11,9 @@ export default function Layout({ children }: LayoutProps) {
   const isHome = location.pathname === '/';
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-background via-background to-lavender">
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5 text-foreground hover:text-primary">
             <Shield className="h-6 w-6 text-primary" strokeWidth={2.25} />
             <span className="font-heading text-xl font-semibold tracking-tight">
@@ -52,7 +52,7 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">{children}</main>
 
       <footer className="border-t border-border bg-card/50">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-6 sm:px-6">

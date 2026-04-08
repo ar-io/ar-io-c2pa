@@ -11,7 +11,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 class ApiError extends Error {
   constructor(
     public status: number,
-    message: string,
+    message: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -63,7 +63,7 @@ export async function checkHealth(): Promise<HealthResponse> {
 
 export async function searchSimilar(
   phash: string,
-  opts?: { threshold?: number; limit?: number },
+  opts?: { threshold?: number; limit?: number }
 ): Promise<SearchResult> {
   const params = new URLSearchParams({ phash });
   if (opts?.threshold !== undefined) {
@@ -77,7 +77,7 @@ export async function searchSimilar(
 
 export async function matchByContent(
   file: File,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal }
 ): Promise<MatchResult> {
   return request<MatchResult>('/v1/matches/byContent', {
     method: 'POST',
@@ -92,7 +92,7 @@ export async function matchByContent(
 export async function matchByBinding(
   alg: string,
   value: string,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal }
 ): Promise<MatchResult> {
   return request<MatchResult>('/v1/matches/byBinding', {
     method: 'POST',
@@ -106,7 +106,7 @@ export async function matchByBinding(
 
 export async function matchByReference(
   url: string,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal }
 ): Promise<MatchResult> {
   return request<MatchResult>('/v1/matches/byReference', {
     method: 'POST',

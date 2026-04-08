@@ -93,13 +93,11 @@ export function useSearch() {
           if (manifestResponse.success && manifestResponse.data) {
             // Extract phash from assertions if available
             const phashAssertion = manifestResponse.data.assertions?.find(
-              (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding',
+              (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
             ) as Record<string, unknown> | undefined;
             const phashValue =
               phashAssertion?.value !== undefined
-                ? String(
-                    (phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '',
-                  )
+                ? String((phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '')
                 : '';
 
             if (phashValue) {
@@ -122,7 +120,7 @@ export function useSearch() {
       for (const match of matchResult.matches) {
         if (
           allResults.some(
-            (r) => r.manifestId === match.manifestId || r.manifestTxId === match.manifestId,
+            (r) => r.manifestId === match.manifestId || r.manifestTxId === match.manifestId
           )
         ) {
           continue;
@@ -182,13 +180,11 @@ export function useSearch() {
 
         // Extract phash from assertions to search for similar manifests
         const phashAssertion = data.assertions?.find(
-          (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding',
+          (a) => (a as Record<string, unknown>)['label'] === 'c2pa.soft-binding'
         ) as Record<string, unknown> | undefined;
         const phashValue =
           phashAssertion?.value !== undefined
-            ? String(
-                (phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '',
-              )
+            ? String((phashAssertion.value as Record<string, unknown>)?.['phash'] ?? '')
             : '';
 
         if (phashValue) {
@@ -220,7 +216,7 @@ export function useSearch() {
         setState({ status: 'error', message: friendlyErrorMessage(err) });
       }
     },
-    [searchByPhash],
+    [searchByPhash]
   );
 
   const reset = useCallback(() => {

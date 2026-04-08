@@ -33,10 +33,10 @@ export default function CopyButton({ value, className = '' }: CopyButtonProps) {
     <button
       type="button"
       onClick={handleCopy}
-      className={`p-1 text-[#23232D]/60 transition-colors hover:text-[#23232D] ${className}`}
+      className={`p-1 text-foreground/60 transition-colors hover:text-foreground ${className}`}
       aria-label={copied ? 'Copied' : 'Copy to clipboard'}
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-[#16A34A]" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   );
 }

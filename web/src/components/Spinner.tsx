@@ -13,11 +13,11 @@ export default function Spinner({ message, size = 'md' }: SpinnerProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-12">
       <div
-        className={`${sizeClasses[size]} animate-spin rounded-full border-2 border-[#F0F0F0] border-t-[#5427C8]`}
+        className={`${sizeClasses[size]} animate-spin rounded-full border-2 border-card border-t-primary`}
         role="status"
         aria-label="Loading"
       />
-      {message && <p className="text-sm text-[#23232D]/60">{message}</p>}
+      {message && <p className="text-sm text-foreground/60">{message}</p>}
     </div>
   );
 }

@@ -35,27 +35,27 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
   return (
     <Link
       to={`/manifest/${encodeURIComponent(manifestLinkId)}`}
-      className="block rounded-2xl border border-[#23232D]/10 bg-[#F0F0F0] p-5 transition-all hover:-translate-y-1 hover:shadow-md"
+      className="block rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-1 hover:shadow-md"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {isExactMatch ? (
             <StatusBadge status="verified" label="EXACT MATCH" />
           ) : rank !== undefined ? (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#5427C8]/10 text-xs font-bold text-[#5427C8]">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
               #{rank}
             </span>
           ) : null}
           {result.contentType && (
-            <span className="text-xs text-[#23232D]/50">{result.contentType}</span>
+            <span className="text-xs text-foreground/50">{result.contentType}</span>
           )}
         </div>
-        <ExternalLink className="h-4 w-4 text-[#23232D]/30" />
+        <ExternalLink className="h-4 w-4 text-foreground/30" />
       </div>
 
       <div className="mb-3 flex items-center gap-1">
-        <FileCheck className="h-4 w-4 shrink-0 text-[#5427C8]" />
-        <span className="min-w-0 truncate font-mono text-sm text-[#23232D]">
+        <FileCheck className="h-4 w-4 shrink-0 text-primary" />
+        <span className="min-w-0 truncate font-mono text-sm text-foreground">
           {result.manifestId || result.manifestTxId}
         </span>
         <CopyButton value={result.manifestId || result.manifestTxId} />
@@ -63,7 +63,7 @@ export default function MatchCard({ result, rank }: MatchCardProps) {
 
       <SimilarityBar distance={result.distance} />
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#23232D]/50">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground/50">
         {result.ownerAddress && (
           <span title={result.ownerAddress}>{truncateAddress(result.ownerAddress)}</span>
         )}
