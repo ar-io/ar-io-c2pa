@@ -73,9 +73,9 @@ export default function Layout({ children }: LayoutProps) {
               rel="noopener noreferrer"
               className="font-medium text-primary hover:text-primary-hover"
             >
-              AR.IO
-            </a>{' '}
-            &mdash; Permanent data, verifiable provenance.
+              ar.io
+            </a>
+            . Permanent data, verifiable provenance.
           </p>
           <p className="text-xs text-foreground-muted">
             Content credentials via{' '}

@@ -11,7 +11,7 @@ interface GatewayImageProps {
 }
 
 /**
- * Displays an image fetched from the AR.IO gateway by transaction ID.
+ * Displays an image fetched from the ar.io gateway by transaction ID.
  * Shows a loading shimmer while loading, and a fallback icon on error.
  * Only renders for image/* content types.
  */

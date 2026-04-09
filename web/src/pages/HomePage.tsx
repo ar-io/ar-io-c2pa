@@ -81,10 +81,10 @@ export default function HomePage() {
       {/* Hero section */}
       <div className="pb-8 pt-12 text-center">
         <h1 className="font-heading text-4xl font-bold text-foreground sm:text-5xl">
-          Verify Content Provenance
+          Search and verify permanent C2PA Content Credentials.
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-foreground/70">
-          Search and verify C2PA Content Credentials registered on Arweave through AR.IO gateways.
+          Verify content provenance registered on Arweave through ar.io gateways.
         </p>
       </div>
 

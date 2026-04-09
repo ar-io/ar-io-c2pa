@@ -35,7 +35,7 @@ function formatTimestamp(ts?: string): string {
   }
 }
 
-/** Gateway base URL — same origin the app is served from. */
+/** Gateway base URL - same origin the app is served from. */
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || window.location.origin;
 
 function gatewayTxUrl(txId: string): string {
@@ -126,8 +126,8 @@ export default function ManifestDetail({ manifestId, searchDistance }: ManifestD
           {searchDistance === undefined
             ? 'This C2PA manifest is registered on the Arweave permaweb.'
             : searchDistance === 0
-              ? 'Exact match — this manifest matches your search query.'
-              : `Similar match — Hamming distance: ${searchDistance} (${Math.max(0, Math.min(100, Math.round(((64 - searchDistance) / 64) * 100)))}% similarity)`}
+              ? 'Exact match. This manifest matches your search query.'
+              : `Similar match. Hamming distance: ${searchDistance} (${Math.max(0, Math.min(100, Math.round(((64 - searchDistance) / 64) * 100)))}% similarity)`}
         </span>
       </div>
 
