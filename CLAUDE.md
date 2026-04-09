@@ -81,5 +81,8 @@ C2PA ANS-104 tag names and types are inlined in `src/protocol/` (originally from
 - In Docker, `GATEWAY_URL` must not be localhost (config validates this at startup and exits)
 - Docker uses `.env.docker` with `GATEWAY_URL=http://core:4000`; local dev uses `.env` with `GATEWAY_URL=http://localhost:3000`
 - `pnpm run format` before committing (Prettier, enforced by CI)
-- OpenAPI spec at `openapi/c2pa-sbr-1.1.0.yaml`
+- Full OpenAPI spec at `openapi/openapi.yaml`, served via Swagger UI at `/api-docs/`
+- Legacy SBR-only spec at `openapi/c2pa-sbr-1.1.0.yaml`
 - `data/` directory holds DuckDB file - never commit it
+- `web/` is the React verify frontend - deployed separately (e.g. on Arweave), configured via `VITE_API_URL`
+- `scripts/seed-test-data.sh` populates 24 real C2PA test transactions for development
