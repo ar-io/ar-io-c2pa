@@ -124,7 +124,7 @@ export default function ManifestDetail({ manifestId, searchDistance }: ManifestD
         />
         <span className="text-sm font-medium text-foreground">
           {searchDistance === undefined
-            ? 'This C2PA manifest is registered on the Arweave permaweb.'
+            ? 'This C2PA manifest is stored on ar.io.'
             : searchDistance === 0
               ? 'Exact match. This manifest matches your search query.'
               : `Similar match. Hamming distance: ${searchDistance} (${Math.max(0, Math.min(100, Math.round(((64 - searchDistance) / 64) * 100)))}% similarity)`}

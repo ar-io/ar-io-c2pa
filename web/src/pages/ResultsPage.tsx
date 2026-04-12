@@ -122,7 +122,7 @@ export default function ResultsPage() {
                   <div className="mb-4 flex items-center gap-2 rounded-2xl border-2 border-success/30 bg-success-bg p-4">
                     <ShieldCheck className="h-5 w-5 text-success" />
                     <span className="text-sm font-semibold text-success">
-                      This image is registered on the Arweave permaweb.
+                      This image is verified on ar.io.
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
