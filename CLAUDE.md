@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Trusthash Sidecar is a C2PA manifest repository, COSE signing oracle, and pHash similarity search service for AR.IO Arweave gateways. It indexes C2PA Content Credentials from gateway webhooks using Arweave transaction tags (no JUMBF parsing). Used with the `@ar-io/turbo-c2pa` client SDK.
+Trusthash Sidecar is a C2PA manifest repository, COSE signing oracle, and pHash similarity search service for AR.IO Arweave gateways. It indexes C2PA Content Credentials from gateway webhooks using Arweave transaction tags (no JUMBF parsing). Includes a React verify frontend in `web/`.
 
 ## Commands
 
@@ -83,6 +83,8 @@ C2PA ANS-104 tag names and types are inlined in `src/protocol/` (originally from
 - `pnpm run format` before committing (Prettier, enforced by CI)
 - Full OpenAPI spec at `openapi/openapi.yaml`, served via Swagger UI at `/api-docs/`
 - Legacy SBR-only spec at `openapi/c2pa-sbr-1.1.0.yaml`
-- `data/` directory holds DuckDB file - never commit it
-- `web/` is the React verify frontend - deployed separately (e.g. on Arweave), configured via `VITE_API_URL`
-- `scripts/seed-test-data.sh` populates 24 real C2PA test transactions for development
+- `data/` directory holds DuckDB file — never commit it, and back it up before rebuilding containers (bind-mount can lose data on `docker compose up --build`)
+- `web/` is the React verify frontend — env vars: `VITE_API_URL`, `VITE_GATEWAY_URL`, `VITE_BASE_PATH`. Dev server proxies API to sidecar automatically.
+- `scripts/seed-test-data.sh` populates 24 real C2PA test transactions for development. Must hit the sidecar directly (not through nginx proxy which blocks `/webhook`).
+- Docker stack includes an nginx proxy that blocks `/webhook` externally — the gateway sends webhooks to the sidecar container directly on `ar-io-network`
+- Gateway webhook config must use the actual container name (e.g. `ar-io-c2pa-trusthash-sidecar-1`), not the compose project name

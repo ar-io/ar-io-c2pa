@@ -2,8 +2,6 @@
 
 C2PA content provenance service for [AR.IO](https://ar.io) Arweave gateways. Indexes C2PA Content Credentials from gateway webhooks, provides perceptual hash similarity search, soft binding resolution, and an optional COSE signing oracle.
 
-Used with the [`@ar-io/turbo-c2pa`](https://github.com/ar-io/ar-io-node-project/tree/main/packages/turbo-c2pa) client SDK for signing images with C2PA and uploading to Arweave.
-
 **[API Docs (Swagger UI)](https://your-gateway.com/api-docs/)** · **[ar.io Provenance](https://ar.io/provenance/)** · **[C2PA Spec](https://c2pa.org)**
 
 ## Features
@@ -52,14 +50,15 @@ docker run -d \
 
 ### 2. Configure gateway webhooks
 
-Add the sidecar to your gateway's webhook targets in your AR.IO gateway `.env`:
+Add the sidecar to your gateway's webhook targets in your AR.IO gateway `.env`. Use the Docker Compose service name (or full container name) so the gateway can reach the sidecar on the shared network:
 
 ```bash
 # Add to existing WEBHOOK_TARGET_SERVERS (comma-separated)
-WEBHOOK_TARGET_SERVERS=http://ar-io-c2pa:3003/webhook
+# Use the actual container/service name reachable on ar-io-network
+WEBHOOK_TARGET_SERVERS=http://ar-io-c2pa-trusthash-sidecar-1:3003/webhook
 
 # Or append to existing targets:
-WEBHOOK_TARGET_SERVERS=http://content-scanner:3100/scan,http://ar-io-c2pa:3003/webhook
+WEBHOOK_TARGET_SERVERS=http://content-scanner:3100/scan,http://ar-io-c2pa-trusthash-sidecar-1:3003/webhook
 ```
 
 Then restart the gateway core:
@@ -87,6 +86,8 @@ To populate the sidecar with real C2PA test transactions for development:
 ```bash
 ./scripts/seed-test-data.sh http://localhost:3003
 ```
+
+> **Note:** The seed script sends webhooks directly to the sidecar. If the nginx proxy is in front (blocking `/webhook`), use the sidecar's container IP or Docker network address instead of `localhost:3003`.
 
 This indexes 24 real Arweave C2PA transactions across 3 different images. See [scripts/seed-test-data.sh](scripts/seed-test-data.sh) for the transaction IDs.
 
@@ -137,33 +138,51 @@ Full API documentation: **[/api-docs/](http://localhost:3003/api-docs/)**
 
 ## Verify Web App
 
-The `web/` directory contains a React frontend for searching and verifying C2PA Content Credentials. It's designed to be deployed separately (e.g., on Arweave) and configured to point at any sidecar instance.
+The `web/` directory contains a React frontend for searching and verifying C2PA Content Credentials. It can be deployed alongside the sidecar or separately.
 
 ```bash
 cd web
 pnpm install
-VITE_API_URL=https://your-gateway.com/c2pa-api pnpm run build
+pnpm run dev    # Dev server on http://localhost:5173 (proxies API to sidecar)
+pnpm run build  # Production build
 ```
 
-See [web/README.md](web/) for details.
+**Web environment variables:**
+
+| Variable           | Default                  | Description                                     |
+| ------------------ | ------------------------ | ----------------------------------------------- |
+| `VITE_API_URL`     | `<base-path>/api`        | Sidecar API URL (auto-derived from deploy path) |
+| `VITE_GATEWAY_URL` | `window.location.origin` | AR.IO gateway URL for transaction/image links   |
+| `VITE_BASE_PATH`   | `/`                      | Base path for deployment (e.g., `/trusthash/`)  |
+
+The dev server proxies `<base-path>/api` requests to `http://localhost:3003` automatically.
 
 ## Environment Variables
 
-| Variable                         | Default                    | Description                          |
-| -------------------------------- | -------------------------- | ------------------------------------ |
-| `PORT`                           | `3003`                     | Server port                          |
-| `GATEWAY_URL`                    | `http://localhost:3000`    | AR.IO gateway URL                    |
-| `DUCKDB_PATH`                    | `./data/provenance.duckdb` | Database file path                   |
-| `LOG_LEVEL`                      | `info`                     | Log level (debug, info, warn, error) |
-| `MAX_IMAGE_SIZE_MB`              | `50`                       | Max upload size for byContent        |
-| `ENABLE_SIGNING`                 | `false`                    | Enable COSE signing oracle           |
-| `SIGNING_ALGORITHM`              | `ES256`                    | Signing algorithm (ES256, ES384)     |
-| `SIGNING_CERT_PEM`               | —                          | Base64-encoded PEM certificate chain |
-| `SIGNING_PRIVATE_KEY_PEM`        | —                          | Base64-encoded PEM private key       |
-| `ENABLE_PROOF_LOCATOR_ARTIFACTS` | `true`                     | Index proof-locator artifacts        |
-| `ENABLE_BY_REFERENCE`            | `true`                     | Enable byReference endpoint          |
+| Variable                            | Default                    | Description                                 |
+| ----------------------------------- | -------------------------- | ------------------------------------------- |
+| `PORT`                              | `3003`                     | Server port                                 |
+| `NODE_ENV`                          | `development`              | Environment (development, production, test) |
+| `LOG_LEVEL`                         | `info`                     | Log level (debug, info, warn, error)        |
+| `PROXY_PORT`                        | `3003`                     | External port for nginx proxy (Docker only) |
+| `GATEWAY_URL`                       | `http://localhost:3000`    | AR.IO gateway URL                           |
+| `DUCKDB_PATH`                       | `./data/provenance.duckdb` | Database file path                          |
+| `MAX_IMAGE_SIZE_MB`                 | `50`                       | Max upload size for byContent               |
+| `REFERENCE_FETCH_TIMEOUT_MS`        | `10000`                    | Timeout for reference URL fetches           |
+| `REMOTE_MANIFEST_CACHE_TTL_MS`      | `300000`                   | Proof-locator manifest cache TTL            |
+| `REMOTE_MANIFEST_CACHE_MAX_ENTRIES` | `200`                      | Max cached remote manifests                 |
+| `REMOTE_MANIFEST_MAX_BYTES`         | `26214400`                 | Max remote manifest size (25 MB)            |
+| `ENABLE_PROOF_LOCATOR_ARTIFACTS`    | `true`                     | Index proof-locator artifacts               |
+| `ENABLE_BY_REFERENCE`               | `true`                     | Enable byReference endpoint                 |
+| `ALLOW_INSECURE_REFERENCE_URL`      | `false`                    | Allow HTTP (non-HTTPS) reference URLs       |
+| `ENABLE_SIGNING`                    | `false`                    | Enable COSE signing oracle                  |
+| `SIGNING_ALGORITHM`                 | `ES256`                    | Signing algorithm (ES256, ES384)            |
+| `SIGNING_CERT_PEM`                  | —                          | Base64-encoded PEM certificate chain        |
+| `SIGNING_PRIVATE_KEY_PEM`           | —                          | Base64-encoded PEM private key              |
+| `KMS_KEY_ARN`                       | —                          | AWS KMS key ARN (production signing)        |
+| `KMS_REGION`                        | —                          | AWS KMS region (production signing)         |
 
-See [.env.example](.env.example) for all options.
+See [.env.example](.env.example) for all options with comments.
 
 ## Development
 
@@ -187,4 +206,4 @@ docker compose -f <gateway-compose> -f docker-compose.sidecar.yaml up -d
 
 ## License
 
-[AGPL-3.0](LICENSE)
+AGPL-3.0
