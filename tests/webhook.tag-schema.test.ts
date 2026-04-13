@@ -8,8 +8,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the database module before importing webhook service
-const mockGetManifestByTxId = vi.fn(() => Promise.resolve(null));
-const mockUpsertManifestArtifactWithBindings = vi.fn(() => Promise.resolve());
+const { mockGetManifestByTxId, mockUpsertManifestArtifactWithBindings } = vi.hoisted(() => ({
+  mockGetManifestByTxId: vi.fn(() => Promise.resolve(null)),
+  mockUpsertManifestArtifactWithBindings: vi.fn(() => Promise.resolve()),
+}));
 
 vi.mock('../src/db/index.js', () => ({
   getManifestByTxId: mockGetManifestByTxId,
