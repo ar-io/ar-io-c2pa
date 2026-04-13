@@ -34,7 +34,7 @@ export default function DropZone({ onFile, disabled = false }: DropZoneProps) {
         setPreview(null);
       }
     },
-    [onFile],
+    [onFile]
   );
 
   const handleDragOver = useCallback(

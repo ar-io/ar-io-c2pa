@@ -94,13 +94,13 @@ This indexes 24 real Arweave C2PA transactions across 3 different images. See [s
 
 After seeding test data, try these:
 
-| Type | Query | Expected |
-|------|-------|----------|
-| **pHash** | `e8f0fcc0f0f0f0f0` | 14 exact matches |
-| **pHash** | `1f0e7b0900ff1f0e` | 4 exact + similar |
-| **Manifest ID** | `urn:c2pa:fa008c04-cbee-43c2-846c-2a3d3c487219` | Single manifest detail |
-| **Manifest ID** | `urn:c2pa:4f6066e2-6bb0-482b-a589-024a826d803a` | Single manifest detail |
-| **Transaction** | `Dw77ya7CVKVT7ffqYl_td4UQUauAN1YitCXRYlp7lNA` | Viewable on any AR.IO gateway |
+| Type            | Query                                           | Expected                      |
+| --------------- | ----------------------------------------------- | ----------------------------- |
+| **pHash**       | `e8f0fcc0f0f0f0f0`                              | 14 exact matches              |
+| **pHash**       | `1f0e7b0900ff1f0e`                              | 4 exact + similar             |
+| **Manifest ID** | `urn:c2pa:fa008c04-cbee-43c2-846c-2a3d3c487219` | Single manifest detail        |
+| **Manifest ID** | `urn:c2pa:4f6066e2-6bb0-482b-a589-024a826d803a` | Single manifest detail        |
+| **Transaction** | `Dw77ya7CVKVT7ffqYl_td4UQUauAN1YitCXRYlp7lNA`   | Viewable on any AR.IO gateway |
 
 ```bash
 # Similarity search
@@ -117,21 +117,21 @@ curl http://localhost:3003/v1/services/supportedAlgorithms
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check with database status and manifest count |
-| `/api-docs/` | GET | Swagger UI — interactive API documentation |
-| `/api-docs/openapi.yaml` | GET | OpenAPI 3.0 spec (YAML) |
-| `/v1/search-similar` | GET | pHash similarity search |
-| `/v1/matches/byBinding` | GET/POST | Resolve by exact soft binding value |
-| `/v1/matches/byContent` | POST | Upload image → compute pHash → find matches |
-| `/v1/matches/byReference` | POST | Fetch remote URL → compute pHash → find matches |
-| `/v1/manifests/{manifestId}` | GET | Manifest retrieval (redirect-first with fallback) |
-| `/v1/services/supportedAlgorithms` | GET | List supported binding algorithms |
-| `/v1/sign` | POST | COSE signing oracle (feature-gated) |
-| `/v1/cert` | GET | X.509 certificate chain (feature-gated) |
-| `/v1/identity/sign` | POST | CAWG identity assertion signing (feature-gated) |
-| `/webhook` | POST | Gateway webhook receiver (internal) |
+| Endpoint                           | Method   | Description                                          |
+| ---------------------------------- | -------- | ---------------------------------------------------- |
+| `/health`                          | GET      | Health check with database status and manifest count |
+| `/api-docs/`                       | GET      | Swagger UI — interactive API documentation           |
+| `/api-docs/openapi.yaml`           | GET      | OpenAPI 3.0 spec (YAML)                              |
+| `/v1/search-similar`               | GET      | pHash similarity search                              |
+| `/v1/matches/byBinding`            | GET/POST | Resolve by exact soft binding value                  |
+| `/v1/matches/byContent`            | POST     | Upload image → compute pHash → find matches          |
+| `/v1/matches/byReference`          | POST     | Fetch remote URL → compute pHash → find matches      |
+| `/v1/manifests/{manifestId}`       | GET      | Manifest retrieval (redirect-first with fallback)    |
+| `/v1/services/supportedAlgorithms` | GET      | List supported binding algorithms                    |
+| `/v1/sign`                         | POST     | COSE signing oracle (feature-gated)                  |
+| `/v1/cert`                         | GET      | X.509 certificate chain (feature-gated)              |
+| `/v1/identity/sign`                | POST     | CAWG identity assertion signing (feature-gated)      |
+| `/webhook`                         | POST     | Gateway webhook receiver (internal)                  |
 
 Full API documentation: **[/api-docs/](http://localhost:3003/api-docs/)**
 
@@ -149,19 +149,19 @@ See [web/README.md](web/) for details.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3003` | Server port |
-| `GATEWAY_URL` | `http://localhost:3000` | AR.IO gateway URL |
-| `DUCKDB_PATH` | `./data/provenance.duckdb` | Database file path |
-| `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `MAX_IMAGE_SIZE_MB` | `50` | Max upload size for byContent |
-| `ENABLE_SIGNING` | `false` | Enable COSE signing oracle |
-| `SIGNING_ALGORITHM` | `ES256` | Signing algorithm (ES256, ES384) |
-| `SIGNING_CERT_PEM` | — | Base64-encoded PEM certificate chain |
-| `SIGNING_PRIVATE_KEY_PEM` | — | Base64-encoded PEM private key |
-| `ENABLE_PROOF_LOCATOR_ARTIFACTS` | `true` | Index proof-locator artifacts |
-| `ENABLE_BY_REFERENCE` | `true` | Enable byReference endpoint |
+| Variable                         | Default                    | Description                          |
+| -------------------------------- | -------------------------- | ------------------------------------ |
+| `PORT`                           | `3003`                     | Server port                          |
+| `GATEWAY_URL`                    | `http://localhost:3000`    | AR.IO gateway URL                    |
+| `DUCKDB_PATH`                    | `./data/provenance.duckdb` | Database file path                   |
+| `LOG_LEVEL`                      | `info`                     | Log level (debug, info, warn, error) |
+| `MAX_IMAGE_SIZE_MB`              | `50`                       | Max upload size for byContent        |
+| `ENABLE_SIGNING`                 | `false`                    | Enable COSE signing oracle           |
+| `SIGNING_ALGORITHM`              | `ES256`                    | Signing algorithm (ES256, ES384)     |
+| `SIGNING_CERT_PEM`               | —                          | Base64-encoded PEM certificate chain |
+| `SIGNING_PRIVATE_KEY_PEM`        | —                          | Base64-encoded PEM private key       |
+| `ENABLE_PROOF_LOCATOR_ARTIFACTS` | `true`                     | Index proof-locator artifacts        |
+| `ENABLE_BY_REFERENCE`            | `true`                     | Enable byReference endpoint          |
 
 See [.env.example](.env.example) for all options.
 

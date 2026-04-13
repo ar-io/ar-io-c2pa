@@ -37,7 +37,7 @@ export default function SearchBox({ onSearch, loading = false }: SearchBoxProps)
       if (!textInput.trim() || loading) return;
       onSearch(classifyInput(textInput));
     },
-    [textInput, loading, onSearch],
+    [textInput, loading, onSearch]
   );
 
   const handleFileDrop = useCallback((file: File | null) => {
@@ -105,12 +105,8 @@ export default function SearchBox({ onSearch, loading = false }: SearchBoxProps)
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
-                {selectedFile.name}
-              </p>
-              <p className="text-xs text-foreground/50">
-                {formatFileSize(selectedFile.size)}
-              </p>
+              <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
+              <p className="text-xs text-foreground/50">{formatFileSize(selectedFile.size)}</p>
             </div>
             <button
               type="button"

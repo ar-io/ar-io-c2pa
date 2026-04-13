@@ -36,9 +36,7 @@ export default function GatewayImage({
 
   return (
     <div className={`relative overflow-hidden bg-foreground/5 ${className}`}>
-      {status === 'loading' && (
-        <div className="absolute inset-0 animate-pulse bg-foreground/10" />
-      )}
+      {status === 'loading' && <div className="absolute inset-0 animate-pulse bg-foreground/10" />}
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-foreground/20">
           <ImageOff className="h-8 w-8" />

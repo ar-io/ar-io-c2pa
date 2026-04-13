@@ -47,7 +47,6 @@ function artifactKindToStatus(kind?: string): 'proof-locator' | 'manifest-store'
   return 'manifest-store';
 }
 
-
 export default function ManifestDetail({ manifestId, searchDistance }: ManifestDetailProps) {
   const navigate = useNavigate();
   const [data, setData] = useState<SearchResultItem | null>(null);
@@ -145,76 +144,75 @@ export default function ManifestDetail({ manifestId, searchDistance }: ManifestD
           </div>
         )}
 
-      <div className="rounded-2xl border border-border bg-card p-6">
-        <dl>
-          {data.manifestId && (
+        <div className="rounded-2xl border border-border bg-card p-6">
+          <dl>
+            {data.manifestId && (
+              <ProvenanceRow
+                label="Manifest ID"
+                value={data.manifestId}
+                mono
+                copyValue={data.manifestId}
+              />
+            )}
             <ProvenanceRow
-              label="Manifest ID"
-              value={data.manifestId}
+              label="Transaction ID"
+              value={
+                <a
+                  href={gatewayTxUrl(data.manifestTxId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
+                >
+                  <span className="font-mono">{truncateAddress(data.manifestTxId, 10)}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              }
+              copyValue={data.manifestTxId}
+            />
+            <ProvenanceRow label="Content Type" value={data.contentType} />
+            <ProvenanceRow
+              label="Owner"
+              value={truncateAddress(data.ownerAddress)}
               mono
-              copyValue={data.manifestId}
+              copyValue={data.ownerAddress}
             />
-          )}
-          <ProvenanceRow
-            label="Transaction ID"
-            value={
-              <a
-                href={gatewayTxUrl(data.manifestTxId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
-              >
-                <span className="font-mono">{truncateAddress(data.manifestTxId, 10)}</span>
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            }
-            copyValue={data.manifestTxId}
-          />
-          <ProvenanceRow label="Content Type" value={data.contentType} />
-          <ProvenanceRow
-            label="Owner"
-            value={truncateAddress(data.ownerAddress)}
-            mono
-            copyValue={data.ownerAddress}
-          />
-          {data.artifactKind && (
+            {data.artifactKind && (
+              <ProvenanceRow
+                label="Artifact Kind"
+                value={<StatusBadge status={artifactKindToStatus(data.artifactKind)} />}
+              />
+            )}
+            {data.claimGenerator && (
+              <ProvenanceRow label="Claim Generator" value={data.claimGenerator} />
+            )}
+            {data.blockTimestamp && (
+              <ProvenanceRow label="Timestamp" value={formatTimestamp(data.blockTimestamp)} />
+            )}
+            {data.blockHeight !== undefined && (
+              <ProvenanceRow label="Block Height" value={String(data.blockHeight)} mono />
+            )}
             <ProvenanceRow
-              label="Artifact Kind"
-              value={<StatusBadge status={artifactKindToStatus(data.artifactKind)} />}
+              label="Arweave"
+              value={
+                <a
+                  href={gatewayTxUrl(data.manifestTxId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
+                >
+                  <span>View on Arweave</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              }
             />
-          )}
-          {data.claimGenerator && (
-            <ProvenanceRow label="Claim Generator" value={data.claimGenerator} />
-          )}
-          {data.blockTimestamp && (
-            <ProvenanceRow label="Timestamp" value={formatTimestamp(data.blockTimestamp)} />
-          )}
-          {data.blockHeight !== undefined && (
-            <ProvenanceRow label="Block Height" value={String(data.blockHeight)} mono />
-          )}
-          <ProvenanceRow
-            label="Arweave"
-            value={
-              <a
-                href={gatewayTxUrl(data.manifestTxId)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
-              >
-                <span>View on Arweave</span>
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            }
-          />
-        </dl>
+          </dl>
+        </div>
       </div>
-      </div>{/* end grid */}
+      {/* end grid */}
 
       {/* Find similar section */}
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h3 className="mb-4 font-heading text-lg font-bold text-foreground">
-          Similarity Search
-        </h3>
+        <h3 className="mb-4 font-heading text-lg font-bold text-foreground">Similarity Search</h3>
         <p className="mb-4 text-sm text-foreground/60">
           Find other C2PA manifests with similar perceptual hashes.
         </p>

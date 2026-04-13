@@ -104,9 +104,7 @@ export default function HomePage() {
               <button
                 key={ex.manifestId}
                 type="button"
-                onClick={() =>
-                  navigate(`/manifest/${encodeURIComponent(ex.manifestId!)}`)
-                }
+                onClick={() => navigate(`/manifest/${encodeURIComponent(ex.manifestId!)}`)}
                 className="rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-foreground/70 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary hover:shadow-sm"
               >
                 {ex.manifestId!.slice(0, 28)}...
@@ -114,9 +112,7 @@ export default function HomePage() {
             ))}
             <button
               type="button"
-              onClick={() =>
-                navigate(`/results?type=phash&phash=e8f0fcc0f0f0f0f0`)
-              }
+              onClick={() => navigate(`/results?type=phash&phash=e8f0fcc0f0f0f0f0`)}
               className="rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-foreground/70 transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:text-primary hover:shadow-sm"
             >
               pHash: e8f0fcc0f0f0f0f0

@@ -7,8 +7,7 @@ import type {
 } from '@/types';
 
 const BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api`;
+  import.meta.env.VITE_API_URL || `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api`;
 
 class ApiError extends Error {
   constructor(
@@ -127,14 +126,14 @@ export async function getManifest(manifestId: string): Promise<ManifestResponse>
  * Uses a broad similarity search and filters by manifestId or txId.
  */
 export async function lookupManifestMetadata(
-  manifestId: string,
+  manifestId: string
 ): Promise<SearchResult['data']['results'][0] | null> {
   try {
     const result = await request<SearchResult>(
-      `/v1/search-similar?phash=0000000000000000&threshold=64&limit=100`,
+      `/v1/search-similar?phash=0000000000000000&threshold=64&limit=100`
     );
     const match = result.data.results.find(
-      (r) => r.manifestId === manifestId || r.manifestTxId === manifestId,
+      (r) => r.manifestId === manifestId || r.manifestTxId === manifestId
     );
     if (match) return match;
   } catch {
