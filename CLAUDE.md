@@ -9,6 +9,7 @@ Trusthash Sidecar is a C2PA manifest repository, COSE signing oracle, and pHash 
 ## Commands
 
 ```bash
+pnpm install              # Installs root + web/ (pnpm workspace)
 pnpm run dev              # Start dev server with hot reload (tsx --watch)
 pnpm run build            # Build with tsup (outputs to dist/)
 pnpm test                 # Run unit tests (vitest)
@@ -16,8 +17,17 @@ pnpm run start            # Run built dist/index.js
 pnpm run format           # Format code (Prettier)
 pnpm run format:check     # Check formatting (CI uses this)
 
+# Single-test invocation
+pnpm test -- tests/webhook.service.test.ts          # one file
+pnpm test -- -t "validates required tags"           # filter by test name
+RUN_INTEGRATION=1 pnpm test -- tests/integration    # integration only
+
 # Integration tests (requires Docker)
 ./scripts/run-integration.sh
+
+# Web app (React verify frontend)
+cd web && pnpm run dev    # http://localhost:5173, proxies API to sidecar
+cd web && pnpm run build  # production build
 
 # Docker
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d   # Dev (local build)
@@ -25,7 +35,7 @@ docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d   # Dev (
 # docker compose -f <gateway-compose> -f docker-compose.sidecar.yaml up -d
 ```
 
-Tests use vitest with no config file (defaults). Integration tests gate on `RUN_INTEGRATION=1` env var and use `describe.skip` otherwise. Unit tests create synthetic images with sharp in `beforeAll`.
+This is a `pnpm-workspace.yaml` repo (root + `web/`); a single `pnpm install` at root installs both. Tests use vitest with no config file (defaults). Integration tests gate on `RUN_INTEGRATION=1` env var and use `describe.skip` otherwise. Unit tests create synthetic images with sharp in `beforeAll`.
 
 ## Architecture
 
@@ -65,6 +75,8 @@ Multi-step resolution chain: redirect to `fetchUrl` -> redirect to `repoUrl` -> 
 ### Signing Oracle
 
 `POST /v1/sign` accepts raw COSE Sig_structure bytes, returns ECDSA signature in IEEE P1363 format. Gated by `ENABLE_SIGNING` env var. Supports ES256/ES384 with local PEM keys. `POST /v1/identity/sign` adds Ethereum wallet verification (CAWG identity assertions).
+
+`SIGNING_CERT_PEM` and `SIGNING_PRIVATE_KEY_PEM` are **base64-encoded** PEM blobs (the env var holds base64 of the entire PEM, including headers — not raw PEM). Setting `KMS_KEY_ARN` + `KMS_REGION` switches the signer to AWS KMS in place of local PEM keys.
 
 ### Soft Binding Resolution
 

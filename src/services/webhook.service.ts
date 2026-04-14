@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { upsertManifestArtifactWithBindings, getManifestByTxId } from '../db/index.js';
+import { insertManifestArtifactWithBindingsIfAbsent } from '../db/index.js';
 import { parsePHash, binaryStringToFloatArray } from '../utils/bit-vector.js';
 import { config } from '../config.js';
 import {
@@ -106,6 +106,85 @@ function getTagValue(tags: WebhookTag[], name: string): string | undefined {
 }
 
 /**
+ * Validate a URL that arrived via an untrusted Arweave tag.
+ *
+ * The gateway indexes every tx matching the protocol filter, so fetch/repo
+ * URLs can be attacker-controlled. A /v1/manifests/:id request later
+ * redirects to this URL, so a `javascript:` or `data:` scheme here would
+ * let an attacker XSS anyone who follows the redirect.
+ *
+ * Rule: keep only http/https URLs whose hostname isn't localhost or a
+ * literal private IP. DNS-level rebinding is caught later at fetch time
+ * (for proof-locators) and is irrelevant for pure redirects.
+ */
+function isSafeManifestUrl(raw: string | undefined | null): boolean {
+  if (!raw) return false;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return false;
+  }
+  // Node preserves `[...]` around IPv6 literals in `.hostname`; strip them
+  // so the prefix checks below actually match.
+  let host = url.hostname.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) {
+    host = host.slice(1, -1);
+  }
+  if (!host) return false;
+  if (
+    host === 'localhost' ||
+    host === '::1' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local')
+  ) {
+    return false;
+  }
+  // Block literal private IPv4 addresses at ingest time.
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [, a, b] = v4.map((x) => Number(x));
+    if (a === 10 || a === 127 || a === 0 || (a === 192 && b === 168)) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 169 && b === 254) return false;
+  }
+  // Any IPv6 literal in host form uses brackets in URL — hostname strips them.
+  // Reject obvious private/multicast IPv6 prefixes; full validation lives in
+  // remote-fetch.service.ts when we actually dial out.
+  if (host.includes(':')) {
+    const lower = host;
+    if (lower === '::' || lower === '::1') return false;
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return false;
+    if (
+      lower.startsWith('fe80') ||
+      lower.startsWith('fe9') ||
+      lower.startsWith('fea') ||
+      lower.startsWith('feb')
+    )
+      return false;
+    if (lower.startsWith('ff')) return false;
+  }
+  return true;
+}
+
+function sanitizeManifestUrl(
+  raw: string | undefined | null,
+  txId: string,
+  field: string
+): string | null {
+  if (!raw) return null;
+  if (isSafeManifestUrl(raw)) return raw;
+  logger.warn(
+    { txId, field, value: raw.slice(0, 200) },
+    'Rejecting unsafe manifest URL from webhook'
+  );
+  return null;
+}
+
+/**
  * Process a webhook payload from the gateway.
  *
  * Required tags (Protocol: C2PA-Manifest-Proof schema):
@@ -136,12 +215,6 @@ export async function processWebhook(payload: WebhookPayload): Promise<WebhookRe
   logger.info({ txId, tagCount: tags.length }, 'Processing webhook');
 
   try {
-    const existing = await getManifestByTxId(txId);
-    if (existing) {
-      logger.debug({ txId }, 'Manifest already indexed, skipping');
-      return { success: true, action: 'skipped', txId, reason: 'Already indexed' };
-    }
-
     // Extract tags
     const protocolTag = getTagValue(tags, TAG_PROTOCOL);
     const storageModeTag = getTagValue(tags, TAG_STORAGE_MODE);
@@ -222,10 +295,16 @@ export async function processWebhook(payload: WebhookPayload): Promise<WebhookRe
       };
     }
 
-    // Derive pHash from soft binding value (base64-encoded 8-byte hash)
+    // Derive pHash from soft binding value (base64-encoded 8-byte hash).
+    // Reject anything that doesn't decode to exactly 8 bytes so garbage tags
+    // can't poison the index with arbitrary floats or trigger later errors.
     let phashFloats: number[] | null = null;
     try {
-      const pHashHex = Buffer.from(softBindingValue, 'base64').toString('hex');
+      const decoded = Buffer.from(softBindingValue, 'base64');
+      if (decoded.length !== 8) {
+        throw new Error(`Expected 8-byte pHash, got ${decoded.length} bytes`);
+      }
+      const pHashHex = decoded.toString('hex');
       const binary = parsePHash(pHashHex);
       phashFloats = binaryStringToFloatArray(binary);
     } catch (error) {
@@ -240,16 +319,34 @@ export async function processWebhook(payload: WebhookPayload): Promise<WebhookRe
 
     const contentType = assetContentType || contentTypeTag || 'application/c2pa';
 
-    await upsertManifestArtifactWithBindings(
+    // Strip any fetch/repo URLs that would produce an unsafe redirect at
+    // /v1/manifests/:id. Keep the manifest record otherwise — the caller can
+    // still resolve via the fallback manifest-store path by tx id.
+    const safeFetchUrl = sanitizeManifestUrl(fetchUrl, txId, 'fetchUrl');
+    const safeRepoUrl = sanitizeManifestUrl(repoUrl, txId, 'repoUrl');
+
+    // Proof-locator transactions whose fetchUrl didn't survive validation
+    // cannot be resolved safely — skip the whole record.
+    if (artifactKind === 'proof-locator' && !safeFetchUrl) {
+      logger.warn({ txId, fetchUrl }, 'Proof-locator fetchUrl rejected by URL policy');
+      return {
+        success: true,
+        action: 'skipped',
+        txId,
+        reason: 'Unsafe proof-locator fetchUrl',
+      };
+    }
+
+    const inserted = await insertManifestArtifactWithBindingsIfAbsent(
       {
         manifestTxId: txId,
         manifestId: manifestIdTag,
         artifactKind,
-        remoteManifestUrl: fetchUrl || null,
+        remoteManifestUrl: safeFetchUrl,
         manifestDigestAlg: manifestStoreHash ? 'SHA-256' : null,
         manifestDigestB64: manifestStoreHash || null,
-        repoUrl: repoUrl || null,
-        fetchUrl: fetchUrl || null,
+        repoUrl: safeRepoUrl,
+        fetchUrl: safeFetchUrl,
         originalHash: null,
         contentType,
         phash: phashFloats,
@@ -261,6 +358,11 @@ export async function processWebhook(payload: WebhookPayload): Promise<WebhookRe
       },
       [{ alg: softBindingAlg, valueB64: softBindingValue, scopeJson: null }]
     );
+
+    if (!inserted) {
+      logger.debug({ txId, manifestId: manifestIdTag }, 'Manifest already indexed, skipping');
+      return { success: true, action: 'skipped', txId, reason: 'Already indexed' };
+    }
 
     logger.info({ txId, artifactKind, owner, blockHeight }, 'Manifest indexed from webhook');
 

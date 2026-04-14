@@ -25,7 +25,13 @@ export async function validateImage(imageBuffer: Buffer): Promise<{
   const sizeMB = imageBuffer.length / (1024 * 1024);
 
   try {
-    const metadata = await sharp(imageBuffer).metadata();
+    // limitInputPixels protects against decompression bombs: sharp will
+    // refuse to decode an image whose pixel count exceeds this threshold,
+    // regardless of compressed byte size.
+    const metadata = await sharp(imageBuffer, {
+      limitInputPixels: config.MAX_IMAGE_PIXELS,
+      pages: 1,
+    }).metadata();
 
     // Check size limit
     if (sizeMB > config.MAX_IMAGE_SIZE_MB) {
