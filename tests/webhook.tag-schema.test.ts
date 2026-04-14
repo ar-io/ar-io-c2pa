@@ -8,21 +8,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the database module before importing webhook service
-const { mockGetManifestByTxId, mockUpsertManifestArtifactWithBindings } = vi.hoisted(() => ({
-  mockGetManifestByTxId: vi.fn(() => Promise.resolve(null)),
-  mockUpsertManifestArtifactWithBindings: vi.fn(() => Promise.resolve()),
+const { mockInsertManifestArtifactWithBindingsIfAbsent } = vi.hoisted(() => ({
+  mockInsertManifestArtifactWithBindingsIfAbsent: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock('../src/db/index.js', () => ({
-  getManifestByTxId: mockGetManifestByTxId,
-  upsertManifestArtifactWithBindings: mockUpsertManifestArtifactWithBindings,
+  insertManifestArtifactWithBindingsIfAbsent: mockInsertManifestArtifactWithBindingsIfAbsent,
 }));
 
 import { processWebhook, type WebhookPayload } from '../src/services/webhook.service.js';
 
 afterEach(() => {
-  mockGetManifestByTxId.mockClear();
-  mockUpsertManifestArtifactWithBindings.mockClear();
+  mockInsertManifestArtifactWithBindingsIfAbsent.mockClear();
+  mockInsertManifestArtifactWithBindingsIfAbsent.mockImplementation(() => Promise.resolve(true));
 });
 
 function buildPayload(
@@ -68,12 +66,13 @@ function fullModeTags() {
   });
 }
 
-function proofModeTags() {
+function proofModeTags(overrides?: Record<string, string>) {
   return manifestStoreTags({
     'C2PA-Storage-Mode': 'proof',
     'Content-Type': 'application/json',
     'C2PA-Manifest-ID': 'urn:c2pa:test-proof',
     'C2PA-Manifest-Fetch-URL': 'https://example.com/c2pa/manifests/test',
+    ...overrides,
   });
 }
 
@@ -82,9 +81,9 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-manifest', manifestStoreTags()));
 
     expect(result.action).toBe('indexed');
-    expect(mockUpsertManifestArtifactWithBindings).toHaveBeenCalledTimes(1);
+    expect(mockInsertManifestArtifactWithBindingsIfAbsent).toHaveBeenCalledTimes(1);
 
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { artifactKind: string; manifestId: string },
     ];
     expect(artifact.artifactKind).toBe('manifest-store');
@@ -95,7 +94,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-full', fullModeTags()));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { artifactKind: string },
     ];
     expect(artifact.artifactKind).toBe('manifest-store');
@@ -105,7 +104,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-proof', proofModeTags()));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { artifactKind: string; manifestDigestAlg: string; manifestDigestB64: string },
     ];
     expect(artifact.artifactKind).toBe('proof-locator');
@@ -117,7 +116,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-fetch', proofModeTags()));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { fetchUrl: string },
     ];
     expect(artifact.fetchUrl).toBe('https://example.com/c2pa/manifests/test');
@@ -127,7 +126,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-phash', manifestStoreTags()));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { phash: number[] },
     ];
     expect(artifact.phash).toHaveLength(64);
@@ -142,7 +141,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-ct', tags));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { contentType: string },
     ];
     expect(artifact.contentType).toBe('image/png');
@@ -153,7 +152,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-gen', tags));
 
     expect(result.action).toBe('indexed');
-    const [artifact] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       { claimGenerator: string },
     ];
     expect(artifact.claimGenerator).toBe('ArDrive C2PA/1.0');
@@ -163,7 +162,7 @@ describe('webhook - new schema', () => {
     const result = await processWebhook(buildPayload('tx-binding', manifestStoreTags()));
 
     expect(result.action).toBe('indexed');
-    const [, bindings] = mockUpsertManifestArtifactWithBindings.mock.calls[0] as [
+    const [, bindings] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
       unknown,
       Array<{ alg: string; valueB64: string }>,
     ];
@@ -241,12 +240,44 @@ describe('webhook - rejection', () => {
     expect(result.reason).toContain('proof-locator');
   });
 
-  it('skips already-indexed transactions', async () => {
-    mockGetManifestByTxId.mockResolvedValueOnce({ id: 1 });
+  it('skips already-indexed transactions (first-write-wins)', async () => {
+    mockInsertManifestArtifactWithBindingsIfAbsent.mockResolvedValueOnce(false);
     const result = await processWebhook(buildPayload('tx-dup', manifestStoreTags()));
 
     expect(result.action).toBe('skipped');
     expect(result.reason).toBe('Already indexed');
+  });
+
+  it('rejects pHash values that do not decode to 8 bytes', async () => {
+    const tags = manifestStoreTags({
+      'C2PA-Soft-Binding-Value': Buffer.from('too-short').toString('base64'),
+    });
+    const result = await processWebhook(buildPayload('tx-bad-phash', tags));
+
+    expect(result.action).toBe('error');
+    expect(result.reason).toContain('Invalid pHash');
+    expect(mockInsertManifestArtifactWithBindingsIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it('strips javascript: fetchUrl at ingest', async () => {
+    // eslint-disable-next-line no-script-url
+    const tags = proofModeTags({ 'C2PA-Manifest-Fetch-URL': 'javascript:alert(1)' });
+    const result = await processWebhook(buildPayload('tx-xss', tags));
+
+    // proof-locator without a safe fetchUrl is unresolvable → skipped
+    expect(result.action).toBe('skipped');
+    expect(mockInsertManifestArtifactWithBindingsIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it('strips private-host repoUrl but keeps manifest-store record', async () => {
+    const tags = manifestStoreTags({ 'C2PA-Manifest-Repo-URL': 'http://192.168.1.1/c2pa' });
+    const result = await processWebhook(buildPayload('tx-priv', tags));
+
+    expect(result.action).toBe('indexed');
+    const [artifact] = mockInsertManifestArtifactWithBindingsIfAbsent.mock.calls[0] as [
+      { repoUrl: string | null },
+    ];
+    expect(artifact.repoUrl).toBeNull();
   });
 
   it('skips unsupported soft binding algorithm', async () => {

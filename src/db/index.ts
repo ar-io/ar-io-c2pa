@@ -50,6 +50,12 @@ function phashSqlLiteral(phash: number[] | null | undefined): string {
   if (!phash || phash.length === 0) {
     return 'NULL';
   }
+  if (phash.length !== 64) {
+    throw new Error(`pHash must be 64 elements, got ${phash.length}`);
+  }
+  if (!phash.every((v) => Number.isFinite(v))) {
+    throw new Error('pHash contains non-finite values');
+  }
   return `[${phash.join(', ')}]::FLOAT[64]`;
 }
 
@@ -194,31 +200,43 @@ export async function insertManifest(
   );
 }
 
-export async function upsertManifestArtifact(
+/**
+ * Insert a manifest artifact only if no record with the same manifest_id
+ * or manifest_tx_id exists. Returns `true` if inserted, `false` if skipped.
+ *
+ * First-write-wins: because gateway webhooks are an untrusted data source
+ * (anyone can publish an Arweave tx with an attacker-chosen manifest_id),
+ * we refuse to overwrite an existing record. The oldest record for a given
+ * id/txid is treated as canonical.
+ */
+export async function insertManifestArtifactIfAbsent(
   record: ManifestArtifactRecord,
   options: { database?: Database; useTransaction?: boolean } = {}
-): Promise<void> {
+): Promise<boolean> {
   if (!record.manifestId) {
-    throw new Error('manifestId is required for upsert');
+    throw new Error('manifestId is required for insert');
   }
 
   const database = requireDatabase(options.database);
   const useTransaction = options.useTransaction ?? true;
 
-  const run = async () => {
-    await database.run(
-      `DELETE FROM manifests WHERE manifest_id = ? OR manifest_tx_id = ?`,
+  const run = async (): Promise<boolean> => {
+    const existing = await database.all(
+      `SELECT 1 FROM manifests WHERE manifest_id = ? OR manifest_tx_id = ? LIMIT 1`,
       record.manifestId,
       record.manifestTxId
     );
+    if (existing.length > 0) {
+      return false;
+    }
     await insertManifest(record, { database });
+    return true;
   };
 
   if (useTransaction) {
-    await runInTransaction(database, run);
-  } else {
-    await run();
+    return runInTransaction(database, run);
   }
+  return run();
 }
 
 /**
@@ -292,8 +310,15 @@ export async function getManifestArtifactById(
 }
 
 /**
- * Search for similar manifests by pHash using L2 (Euclidean) distance
- * on the normalized float-array representation.
+ * Search for similar manifests by pHash using Hamming distance.
+ *
+ * DuckDB's `array_distance` is L2 (Euclidean). On 0/1 vectors, squared L2
+ * equals the Hamming distance (each differing bit contributes (1-0)² = 1).
+ * We compute the squared distance in SQL, compare against the caller's
+ * Hamming `threshold` directly, and return an integer Hamming distance.
+ *
+ * Float storage wobble (any non-exact 0/1 value) is absorbed by rounding
+ * the squared distance to the nearest integer.
  */
 export async function searchSimilarByPHash(
   phash: number[],
@@ -302,15 +327,21 @@ export async function searchSimilarByPHash(
 ): Promise<Array<ManifestRecord & { distance: number }>> {
   const database = requireDatabase();
 
+  if (phash.length !== 64 || !phash.every((v) => Number.isFinite(v))) {
+    throw new Error('searchSimilarByPHash requires a finite 64-element pHash');
+  }
+
   const phashArray = `[${phash.join(', ')}]`;
 
   const result = await database.all(
     `SELECT *,
-      array_distance(phash, ${phashArray}::FLOAT[64]) AS distance
+      (array_distance(phash, ${phashArray}::FLOAT[64])
+       * array_distance(phash, ${phashArray}::FLOAT[64])) AS hamming_distance
     FROM manifests
     WHERE manifest_id IS NOT NULL AND phash IS NOT NULL
-      AND array_distance(phash, ${phashArray}::FLOAT[64]) <= ?
-    ORDER BY distance ASC
+      AND (array_distance(phash, ${phashArray}::FLOAT[64])
+           * array_distance(phash, ${phashArray}::FLOAT[64])) <= ?
+    ORDER BY hamming_distance ASC
     LIMIT ?`,
     threshold,
     limit
@@ -318,7 +349,7 @@ export async function searchSimilarByPHash(
 
   return result.map((row: Record<string, unknown>) => ({
     ...mapManifestRow(row),
-    distance: Number(row.distance),
+    distance: Math.round(Number(row.hamming_distance)),
   }));
 }
 
@@ -364,25 +395,39 @@ export async function getManifestCount(): Promise<number> {
 export async function insertManifestWithBindings(
   record: ManifestRecord,
   bindings: SoftBindingRecord[]
-): Promise<void> {
-  await upsertManifestArtifactWithBindings(record, bindings);
+): Promise<boolean> {
+  return insertManifestArtifactWithBindingsIfAbsent(record, bindings);
 }
 
-export async function upsertManifestArtifactWithBindings(
+/**
+ * Insert a manifest artifact and its soft bindings in a single transaction,
+ * only if no existing record has the same manifest_id or manifest_tx_id.
+ *
+ * Returns `true` if the record was inserted, `false` if an earlier record
+ * already exists (first-write-wins).
+ */
+export async function insertManifestArtifactWithBindingsIfAbsent(
   record: ManifestArtifactRecord,
   bindings: SoftBindingRecord[]
-): Promise<void> {
+): Promise<boolean> {
   if (!record.manifestId) {
     throw new Error('manifestId is required to store soft bindings');
   }
 
   const database = requireDatabase();
 
-  await runInTransaction(database, async () => {
-    await upsertManifestArtifact(record, { database, useTransaction: false });
+  return runInTransaction(database, async () => {
+    const inserted = await insertManifestArtifactIfAbsent(record, {
+      database,
+      useTransaction: false,
+    });
+    if (!inserted) {
+      return false;
+    }
     await replaceSoftBindings(record.manifestId as string, bindings, {
       database,
       useTransaction: false,
     });
+    return true;
   });
 }

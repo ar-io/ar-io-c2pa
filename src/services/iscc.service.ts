@@ -7,6 +7,7 @@
 
 import sharp from 'sharp';
 import { gen_image_code_v0, iscc_decode } from '@iscc/lib';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const ISCC_THUMBNAIL_SIZE = 32;
@@ -31,7 +32,10 @@ export interface IsccResult {
  */
 export async function computeIsccImageCode(imageBuffer: Buffer): Promise<IsccResult> {
   try {
-    const { data } = await sharp(imageBuffer)
+    const { data } = await sharp(imageBuffer, {
+      limitInputPixels: config.MAX_IMAGE_PIXELS,
+      pages: 1,
+    })
       .resize(ISCC_THUMBNAIL_SIZE, ISCC_THUMBNAIL_SIZE, { fit: 'fill', kernel: 'cubic' })
       .greyscale()
       .raw()

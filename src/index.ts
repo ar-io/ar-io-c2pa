@@ -13,6 +13,7 @@ import manifests from './routes/manifests.js';
 import services from './routes/services.js';
 import sign from './routes/sign.js';
 import apiDocs from './routes/api-docs.js';
+import { createRateLimiter } from './middleware/rate-limit.js';
 
 const app = new Hono();
 
@@ -26,13 +27,37 @@ app.use(
 );
 app.use('*', honoLogger());
 
+// Per-IP rate limits. Buckets are tight on CPU/egress-heavy endpoints and
+// lenient on cheap reads. /health deliberately has no limit so orchestration
+// probes don't compete with real traffic.
+const cheapReadLimiter = createRateLimiter({ capacity: 60, windowMs: 60_000, name: 'read' });
+const searchLimiter = createRateLimiter({ capacity: 30, windowMs: 60_000, name: 'search' });
+const uploadLimiter = createRateLimiter({ capacity: 10, windowMs: 60_000, name: 'upload' });
+const referenceLimiter = createRateLimiter({ capacity: 6, windowMs: 60_000, name: 'reference' });
+const webhookLimiter = createRateLimiter({ capacity: 600, windowMs: 60_000, name: 'webhook' });
+const signLimiter = createRateLimiter({ capacity: 30, windowMs: 60_000, name: 'sign' });
+
 // Routes
 app.route('/health', health);
+app.use('/webhook/*', webhookLimiter);
+app.use('/webhook', webhookLimiter);
 app.route('/webhook', webhook);
+app.use('/v1/search-similar/*', searchLimiter);
 app.route('/v1/search-similar', search);
+
+// Matches: /byContent decodes arbitrary images (CPU), /byReference egresses
+// (attacker-controlled URL); both get stricter buckets than plain /byBinding.
+app.use('/v1/matches/byContent', uploadLimiter);
+app.use('/v1/matches/byReference', referenceLimiter);
+app.use('/v1/matches/*', cheapReadLimiter);
 app.route('/v1/matches', softbinding);
+
+app.use('/v1/manifests/*', cheapReadLimiter);
 app.route('/v1/manifests', manifests);
 app.route('/v1/services', services);
+
+app.use('/v1/sign', signLimiter);
+app.use('/v1/identity/sign', signLimiter);
 app.route('/v1', sign);
 app.route('/api-docs', apiDocs);
 

@@ -10,7 +10,10 @@ type CachedRemoteManifest = {
   expiresAt: number;
 };
 
+// Map insertion order doubles as the LRU queue: on hit we delete+reinsert to
+// move the entry to the tail; eviction pops from the head.
 const remoteManifestCache = new Map<string, CachedRemoteManifest>();
+let cachedBytes = 0;
 
 export class RemoteManifestResolutionError extends Error {
   statusCode: number;
@@ -70,25 +73,48 @@ function verifyDigest(buffer: Buffer, digestAlg: string, digestB64: string): voi
   }
 }
 
+/**
+ * Hash the composite cache key so a `|` inside the manifestId or URL can't
+ * collide with a different request (e.g. `"foo|bar"` + `"baz"` vs. `"foo"` +
+ * `"bar|baz"`).
+ */
 function buildCacheKey(options: {
   manifestId: string;
   remoteManifestUrl: string;
   manifestDigestAlg: string;
   manifestDigestB64: string;
 }): string {
-  return [
+  const payload = JSON.stringify([
     options.manifestId,
     options.remoteManifestUrl,
     options.manifestDigestAlg.toLowerCase(),
     options.manifestDigestB64,
-  ].join('|');
+  ]);
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+function deleteCacheEntry(key: string): void {
+  const entry = remoteManifestCache.get(key);
+  if (!entry) return;
+  cachedBytes -= entry.buffer.length;
+  remoteManifestCache.delete(key);
 }
 
 function pruneExpiredCacheEntries(now: number): void {
   for (const [key, entry] of remoteManifestCache.entries()) {
     if (entry.expiresAt <= now) {
-      remoteManifestCache.delete(key);
+      deleteCacheEntry(key);
     }
+  }
+}
+
+function evictLruUntilWithinLimits(): void {
+  const maxEntries = config.REMOTE_MANIFEST_CACHE_MAX_ENTRIES;
+  const maxBytes = config.REMOTE_MANIFEST_CACHE_MAX_BYTES;
+  while (remoteManifestCache.size > maxEntries || cachedBytes > maxBytes) {
+    const oldestKey = remoteManifestCache.keys().next().value;
+    if (!oldestKey) break;
+    deleteCacheEntry(oldestKey);
   }
 }
 
@@ -100,7 +126,7 @@ function getCachedManifest(cacheKey: string): Buffer | null {
     return null;
   }
 
-  // promote to MRU
+  // promote to MRU by re-inserting (Map preserves insertion order)
   remoteManifestCache.delete(cacheKey);
   remoteManifestCache.set(cacheKey, cached);
 
@@ -111,18 +137,16 @@ function setCachedManifest(cacheKey: string, buffer: Buffer): void {
   const now = Date.now();
   pruneExpiredCacheEntries(now);
 
+  // Replace any prior entry under this key so the byte counter stays accurate.
+  deleteCacheEntry(cacheKey);
+
   remoteManifestCache.set(cacheKey, {
     buffer,
     expiresAt: now + config.REMOTE_MANIFEST_CACHE_TTL_MS,
   });
+  cachedBytes += buffer.length;
 
-  while (remoteManifestCache.size > config.REMOTE_MANIFEST_CACHE_MAX_ENTRIES) {
-    const oldestKey = remoteManifestCache.keys().next().value;
-    if (!oldestKey) {
-      break;
-    }
-    remoteManifestCache.delete(oldestKey);
-  }
+  evictLruUntilWithinLimits();
 }
 
 export async function fetchRemoteManifestWithCache(options: {
@@ -195,4 +219,5 @@ export async function fetchRemoteManifestWithCache(options: {
 
 export function clearRemoteManifestCache(): void {
   remoteManifestCache.clear();
+  cachedBytes = 0;
 }

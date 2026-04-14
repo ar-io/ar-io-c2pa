@@ -7,6 +7,7 @@
 
 import sharp from 'sharp';
 import { bmvbhash } from 'blockhash-core';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import {
   hexToBinaryString,
@@ -46,9 +47,13 @@ export interface PHashResult {
  */
 export async function computePHash(imageBuffer: Buffer): Promise<PHashResult> {
   try {
-    // Get raw RGBA pixel data using sharp
-    const { data, info } = await sharp(imageBuffer)
-      .ensureAlpha() // Ensure RGBA format
+    // Get raw RGBA pixel data using sharp. limitInputPixels guards against
+    // decompression-bomb DoS — see image.service.ts for the same budget.
+    const { data, info } = await sharp(imageBuffer, {
+      limitInputPixels: config.MAX_IMAGE_PIXELS,
+      pages: 1,
+    })
+      .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
 

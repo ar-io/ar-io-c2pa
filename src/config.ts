@@ -28,6 +28,14 @@ const envSchema = z.object({
 
   // Image Processing
   MAX_IMAGE_SIZE_MB: z.coerce.number().default(50),
+  // Pixel budget for decoded images; prevents decompression-bomb DoS where a
+  // small compressed payload expands into gigabytes of raw RGBA. 50 MP fits
+  // any realistic phone/camera shot.
+  MAX_IMAGE_PIXELS: z.coerce.number().default(50_000_000),
+
+  // Remote manifest cache byte cap (separate from the entry count). Evicted
+  // LRU once total cached bytes exceed this, regardless of entry count.
+  REMOTE_MANIFEST_CACHE_MAX_BYTES: z.coerce.number().default(256 * 1024 * 1024),
 
   // Reference Fetch
   REFERENCE_FETCH_TIMEOUT_MS: z.coerce.number().default(10000),
