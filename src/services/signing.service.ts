@@ -44,46 +44,68 @@ export function getCertificatePem(): string | null {
  * P1363 format: <r padded to componentBytes> <s padded to componentBytes>
  *
  * componentBytes is 32 for P-256 (ES256) or 48 for P-384 (ES384).
+ *
+ * Every `der[offset]` read below is bounds-checked; a short or truncated
+ * buffer throws instead of silently producing a malformed signature via
+ * `subarray` truncation. Leading-zero handling strips *all* 0x00 sign-pad
+ * bytes (not just one gated on the first byte) and throws if the remaining
+ * integer is still larger than the curve order, which would indicate a
+ * malformed signature rather than valid DER.
  */
 export function derToIeeeP1363(der: Buffer, componentBytes: number): Buffer {
+  const need = (offset: number, label: string): void => {
+    if (offset >= der.length) {
+      throw new Error(`Invalid DER signature: truncated at ${label}`);
+    }
+  };
+
+  need(0, 'SEQUENCE tag');
   if (der[0] !== 0x30) {
     throw new Error('Invalid DER signature: expected SEQUENCE tag 0x30');
   }
 
-  let offset = 2; // skip SEQUENCE tag and length
-
-  // Handle multi-byte length encoding
+  need(1, 'SEQUENCE length');
+  let offset = 2;
   if (der[1] & 0x80) {
     const lenBytes = der[1] & 0x7f;
+    if (lenBytes === 0 || lenBytes > 4) {
+      throw new Error('Invalid DER signature: unsupported SEQUENCE length form');
+    }
+    need(1 + lenBytes, 'SEQUENCE length bytes');
     offset = 2 + lenBytes;
   }
 
   // Parse r
+  need(offset, 'r INTEGER tag');
   if (der[offset] !== 0x02) {
     throw new Error('Invalid DER signature: expected INTEGER tag 0x02 for r');
   }
   offset++;
+  need(offset, 'r length');
   const rLen = der[offset];
   offset++;
+  if (offset + rLen > der.length) {
+    throw new Error('Invalid DER signature: r length overruns buffer');
+  }
   let r = der.subarray(offset, offset + rLen);
   offset += rLen;
 
   // Parse s
+  need(offset, 's INTEGER tag');
   if (der[offset] !== 0x02) {
     throw new Error('Invalid DER signature: expected INTEGER tag 0x02 for s');
   }
   offset++;
+  need(offset, 's length');
   const sLen = der[offset];
   offset++;
+  if (offset + sLen > der.length) {
+    throw new Error('Invalid DER signature: s length overruns buffer');
+  }
   let s = der.subarray(offset, offset + sLen);
 
-  // Strip leading zero padding (DER uses leading 0x00 for positive sign)
-  if (r.length > componentBytes && r[0] === 0x00) {
-    r = r.subarray(r.length - componentBytes);
-  }
-  if (s.length > componentBytes && s[0] === 0x00) {
-    s = s.subarray(s.length - componentBytes);
-  }
+  r = stripLeadingZeros(r, componentBytes, 'r');
+  s = stripLeadingZeros(s, componentBytes, 's');
 
   // Left-pad to componentBytes if shorter
   const result = Buffer.alloc(componentBytes * 2);
@@ -91,6 +113,18 @@ export function derToIeeeP1363(der: Buffer, componentBytes: number): Buffer {
   s.copy(result, componentBytes * 2 - s.length);
 
   return result;
+}
+
+function stripLeadingZeros(component: Buffer, componentBytes: number, label: string): Buffer {
+  let i = 0;
+  while (i < component.length && component[i] === 0x00 && component.length - i > componentBytes) {
+    i++;
+  }
+  const trimmed = i === 0 ? component : component.subarray(i);
+  if (trimmed.length > componentBytes) {
+    throw new Error(`Invalid DER signature: ${label} exceeds ${componentBytes} bytes after trim`);
+  }
+  return trimmed;
 }
 
 /**

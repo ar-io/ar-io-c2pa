@@ -121,6 +121,67 @@ describe('derToIeeeP1363', () => {
     expect(p1363[63]).toBe(0x02);
     expect(p1363[32]).toBe(0x00);
   });
+
+  it('strips DER sign-padding and places value at the right edge', () => {
+    // 33-byte r = 0x00 + 32 real bytes (DER sign-pad). The old code only
+    // stripped when r[0] === 0x00, which was correct here, but the check
+    // was unsafe — if the padding were missing the trim skipped and the
+    // output was silently corrupt. Verify the happy path stays correct.
+    const r = Buffer.concat([Buffer.from([0x00]), Buffer.alloc(32, 0xaa)]);
+    const s = Buffer.concat([Buffer.from([0x00]), Buffer.alloc(32, 0xbb)]);
+    const der = Buffer.concat([
+      Buffer.from([0x30, 2 + r.length + 2 + s.length]),
+      Buffer.from([0x02, r.length]),
+      r,
+      Buffer.from([0x02, s.length]),
+      s,
+    ]);
+
+    const p1363 = derToIeeeP1363(der, 32);
+
+    expect(p1363.length).toBe(64);
+    expect(p1363.subarray(0, 32).equals(Buffer.alloc(32, 0xaa))).toBe(true);
+    expect(p1363.subarray(32, 64).equals(Buffer.alloc(32, 0xbb))).toBe(true);
+  });
+
+  it('rejects a DER whose integer is longer than componentBytes', () => {
+    // 33-byte r with no 0x00 pad — value literally exceeds curve order.
+    // Previous code silently copied with a negative offset and produced
+    // garbage; we now throw.
+    const r = Buffer.alloc(33, 0x7f);
+    const s = Buffer.alloc(32, 0x01);
+    const der = Buffer.concat([
+      Buffer.from([0x30, 2 + r.length + 2 + s.length]),
+      Buffer.from([0x02, r.length]),
+      r,
+      Buffer.from([0x02, s.length]),
+      s,
+    ]);
+
+    expect(() => derToIeeeP1363(der, 32)).toThrow(/exceeds 32 bytes/);
+  });
+
+  it('rejects a DER truncated before r length byte', () => {
+    expect(() => derToIeeeP1363(Buffer.from([0x30, 0x10, 0x02]), 32)).toThrow(/truncated/);
+  });
+
+  it('rejects a DER whose declared r length overruns the buffer', () => {
+    // Claims rLen=0x20 but only 4 bytes follow.
+    const der = Buffer.from([0x30, 0x24, 0x02, 0x20, 0x01, 0x02, 0x03, 0x04]);
+    expect(() => derToIeeeP1363(der, 32)).toThrow(/overruns/);
+  });
+
+  it('rejects a DER missing the s INTEGER', () => {
+    // Valid SEQUENCE header + valid r, but body ends before s.
+    const der = Buffer.from([0x30, 0x04, 0x02, 0x02, 0x01, 0x02]);
+    expect(() => derToIeeeP1363(der, 32)).toThrow();
+  });
+
+  it('rejects an unsupported SEQUENCE length form', () => {
+    // 0x85 = long form with 5 length bytes (we cap at 4).
+    const der = Buffer.from([0x30, 0x85, 0x00, 0x00, 0x00, 0x00, 0x01]);
+    expect(() => derToIeeeP1363(der, 32)).toThrow(/unsupported SEQUENCE length/);
+  });
 });
 
 // ─── Route tests ───
